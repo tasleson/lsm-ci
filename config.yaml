@@ -1,0 +1,15 @@
+# What arrays are allowed to be used for unit tests
+ARRAYS:
+- {ID: 'unique desc. text', PLUGIN: targetd, PASSWORD: <secret>, URI: 'targetd://admin@fubar'}
+- {ID: 'some more desc. and unique text', PLUGIN: targetd, PASSWORD: <secret>, URI: 'targetd://admin@fubar'}
+
+# Where the output of the unit tests should be held
+LOGDIR: /tmp/unit
+
+# What is being executed 
+PROGRAM: <some program>
+
+# User name and password to talk to the unit_test.py service, http basic auth
+# use over https!
+USER: <some user>
+PASSWORD: <some password>
