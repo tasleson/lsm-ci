@@ -283,7 +283,7 @@ def e_handler():
 
     if request.headers['X-Github-Event'] == 'pull_request':
         repo = request.json["pull_request"]["base"]["repo"]["full_name"]
-        clone = request.json["pull_request"]["base"]["repo"]["clone_url"]
+        clone = request.json["pull_request"]["head"]["repo"]["clone_url"]
         sha = request.json["pull_request"]['head']['sha']
         branch = request.json["pull_request"]['head']['ref']
 
