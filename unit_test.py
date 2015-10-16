@@ -12,7 +12,7 @@ import os
 from bottle import response
 import json
 import sys
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import call
 from multiprocessing import Process
 
 
@@ -26,13 +26,17 @@ def _check(user, pw):
     return False
 
 
-def _call(command):
+def _lcall(command, job_id):
     """
     Call an executable and return a tuple of exitcode, stdout&stderr
     """
-    process = Popen(command, stdout=PIPE, stderr=STDOUT)
-    out = process.communicate()
-    return process.returncode, out[0]
+
+    # Write output to a file so we can see what's going on while it's running
+    f = '/tmp/%s.out' % job_id
+
+    with open(f, 'w', buffering=1) as log:  # Max buffer 1 line (text mode)
+        exit_value = call(command, stdout=log, stderr=log)
+    return exit_value, f
 
 
 def _file_name(job_id):
@@ -46,8 +50,15 @@ def _run_command(job_id, args):
 
     cmd.extend(args)
 
-    (ec, out) = _call(cmd)
+    (ec, output_file) = _lcall(cmd, job_id)
     log = _file_name(job_id)
+
+    # Read in output file in it's entirety
+    with open(output_file, 'r') as o:
+        out = o.read()
+
+    # Delete file to prevent /tmp from filling up
+    os.remove(output_file)
 
     with open(log, 'w') as error_file:
         error_file.write(yaml.dump(dict(EC=str(ec), OUTPUT=out)))
