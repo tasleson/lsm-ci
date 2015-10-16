@@ -97,7 +97,8 @@ def _return_state(job_id, only_running=False):
     job = jobs[job_id]
 
     if not only_running or (only_running and job["STATUS"] == 'RUNNING'):
-        return {"STATUS": job["STATUS"], "ID": job['ID'],  "JOB_ID": job_id, "PLUGIN":job['PLUGIN'] }
+        return {"STATUS": job["STATUS"], "ID": job['ID'],
+                "JOB_ID": job_id, "PLUGIN": job['PLUGIN']}
     return None
 
 

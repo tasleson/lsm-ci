@@ -227,6 +227,7 @@ def _tscmp(a, b):
         result = 1
 
     for i in range(0, b_len):
+        # noinspection PyUnresolvedReferences
         result |= ord(a[i]) ^ ord(b[i])
 
     return result == 0
@@ -234,10 +235,12 @@ def _tscmp(a, b):
 
 # Verify the payload using our shared secret with github
 def _verify_signature(payload_body, header_signature):
+    # noinspection PyUnresolvedReferences
     h = hmac.new(GIT_SECRET, payload_body, hashlib.sha1)
     signature = 'sha1=' + h.hexdigest()
     try:
         # Python 2.7 and later have this which is suggested
+        # noinspection PyUnresolvedReferences
         return hmac.compare_digest(signature, header_signature)
     except AttributeError:
         return _tscmp(signature, header_signature)
