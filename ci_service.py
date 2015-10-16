@@ -149,8 +149,11 @@ def _run_tests(info):
 
     # Set all the status
     for a in arrays:
-        _create_status(info["repo"], info['sha'], "pending", 'Plugin = '
-                       + a[1], a[0])
+        _create_status(info["repo"], info['sha'], "pending",
+                       'Plugin = %s started @ %s' %
+                       (a[1], datetime.datetime.fromtimestamp(
+                           time.time()).strftime('%m/%d %H:%M:%S')),
+                       a[0])
 
     # Wait until all the arrays are free
     # TODO re-work this with some type of scheduler
