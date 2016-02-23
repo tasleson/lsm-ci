@@ -49,15 +49,39 @@ CI_SERVICE_URL = os.getenv('CI_URL', 'http://%s:%s/log' % (HOST, PORT))
 processes = []
 
 
+def _request_with_retries(url):
+    for i in range(0, 10):
+        try:
+            r = requests.get(url, auth=(SNIA_USER, SNIA_TOKEN))
+            return r
+        except requests.ConnectionError as ce:
+            _p("ConnectionError to (GET) %s : message(%s)" %
+               (SNIA_URL, str(ce)))
+            _p("Trying again in 1 second")
+            time.sleep(1)
+
+
+def _post_with_retries(url, data, auth):
+    for i in range(0, 10):
+        try:
+            r = requests.post(url, auth=auth, json=data)
+            return r
+        except requests.ConnectionError as ce:
+            _p("ConnectionError to (post) %s : message(%s)" %
+               (SNIA_URL, str(ce)))
+            _p("Trying again in 1 second")
+            time.sleep(1)
+
+
 def _arrays_available():
-    r = requests.get(SNIA_URL + '/' + 'arrays', auth=(SNIA_USER, SNIA_TOKEN))
+    r = _request_with_retries(SNIA_URL + '/' + 'arrays')
     if r.status_code == 200:
         return r.json()
     return []
 
 
 def _arrays_running():
-    r = requests.get(SNIA_URL + '/' + 'running', auth=(SNIA_USER, SNIA_TOKEN))
+    r = _request_with_retries(SNIA_URL + '/' + 'running')
     if r.status_code == 200:
         return r.json()
     return []
@@ -71,8 +95,8 @@ def _print_error(req, msg):
 
 def _array_start(clone_url, branch, array_id):
     data = {"REPO": clone_url, "BRANCH": branch, "ID": array_id}
-    r = requests.post(SNIA_URL + '/' + 'test',
-                      auth=(SNIA_USER, SNIA_TOKEN), json=data)
+    r = _post_with_retries(SNIA_URL + '/' + 'test', data,
+                           (SNIA_USER, SNIA_TOKEN))
 
     if r.status_code != 201:
         _print_error(r, 'Unexpected error on starting test')
@@ -84,7 +108,7 @@ def _array_start(clone_url, branch, array_id):
 
 def _log_write(job_id):
     url = "%s/log/%s" % (SNIA_URL, job_id)
-    r = requests.get(url, auth=(SNIA_USER, SNIA_TOKEN))
+    r = _request_with_retries(url)
     if r.status_code == 200:
         data = r.json()['OUTPUT']
         with open(ERROR_LOG_DIR + '/' + job_id + '.html', 'w') as log_file:
@@ -108,7 +132,7 @@ def _log_read(fn):
 
 
 def _jobs():
-    r = requests.get(SNIA_URL + '/' + 'test', auth=(SNIA_USER, SNIA_TOKEN))
+    r = _request_with_retries(SNIA_URL + '/' + 'test')
     if r.status_code == 200:
         return r.json()
     return []
@@ -132,7 +156,7 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
     if log_url:
         data["target_url"] = log_url
 
-    r = requests.post(url, auth=(USER, TOKEN), json=data)
+    r = _post_with_retries(url, data, (HOST, TOKEN))
     if r.status_code == 201:
         _p('We updated status %s' % str(data))
     else:
