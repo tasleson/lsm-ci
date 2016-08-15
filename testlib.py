@@ -137,6 +137,11 @@ class TestNode(object):
 
         try:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+            # We have pings that are happening every 15 seconds, lets wait
+            # for up to 3 minutes waiting for one, otherwise we will error out
+            # with a timeout on the read.
+            self.s.settimeout(3 * 60)
             self.s = ssl.wrap_socket(self.s,
                                      ca_certs="server_cert.pem",
                                      cert_reqs=ssl.CERT_REQUIRED,
