@@ -125,6 +125,15 @@ def p(msg):
     sys.stdout.flush()
 
 
+def _try_close(s):
+        # noinspection PyBroadException
+        try:
+            if s:
+                s.close()
+        except Exception:
+            pass
+
+
 class TestNode(object):
 
     def __init__(self, server_ip, port=PORT):
@@ -155,6 +164,7 @@ class TestNode(object):
         except Exception as e:
             # Log the error
             p("connect exception: %s" % str(e))
+            _try_close(self.s)
             return False
 
         return True
@@ -167,10 +177,7 @@ class TestNode(object):
 
     def disconnect(self):
         # noinspection PyBroadException
-        try:
-            self.s.close()
-        except Exception:
-            pass
+        _try_close(self.s)
         self.s = None
         self.t = None
 
@@ -213,12 +220,8 @@ class Node(object):
     def close(self):
         with self.lock:
             # noinspection PyBroadException
-            try:
-                self.s.close()
-            except Exception:
-                pass
-            finally:
-                self.state = Node.UNUSABLE
+            _try_close(self.s)
+            self.state = Node.UNUSABLE
 
     def verify(self):
         rc = False
@@ -334,56 +337,87 @@ class NodeManager(object):
         return rc
 
     @staticmethod
-    def main_event_loop(node_mgr):
-        # Setup the listening socket
+    def _setup_listening(ip, port):
         bindsocket = socket.socket()
         bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        bindsocket.bind((node_mgr.ip, node_mgr.port))
+        bindsocket.bind((ip, port))
         bindsocket.listen(5)
+        return bindsocket
+
+    @staticmethod
+    def main_event_loop(node_mgr):
+        # Setup the listening socket
+        bindsocket = NodeManager._setup_listening(node_mgr.ip, node_mgr.port)
 
         while RUN.value:
+
+            new_socket = None
+            connection = None
+            from_addr = None
+
             # noinspection PyBroadException
             try:
-                ready = select.select([bindsocket], [], [], 15)
+                ready = select.select([bindsocket], [], [bindsocket], 15)
 
-                for r in ready[0]:
-                    new_socket, from_addr = bindsocket.accept()
-                    p("Accepted a connection from %s" % str(from_addr))
+                if len(ready[2]):
+                    p("Error on listening socket, re-creating...")
+                    _try_close(bindsocket)
+                    bindsocket = NodeManager._setup_listening(
+                        node_mgr.ip, node_mgr.port)
+                else:
+                    for r in ready[0]:
+                        new_socket, from_addr = bindsocket.accept()
 
-                    connection = ssl.wrap_socket(new_socket,
-                                                 server_side=True,
-                                                 certfile="server_cert.pem",
-                                                 keyfile="server_key.pem",
+                        # Set a fairly short timeout, so badly behaving clients
+                        # don't muck things up.
+                        new_socket.settimeout(1)
+                        connection = ssl.wrap_socket(
+                            new_socket,
+                            server_side=True,
+                            certfile="server_cert.pem",
+                            keyfile="server_key.pem",
 
-                                                 ca_certs="client_cert.pem",
-                                                 cert_reqs=ssl.CERT_REQUIRED)
+                            ca_certs="client_cert.pem",
+                            cert_reqs=ssl.CERT_REQUIRED)
 
+                        p("Accepted a connection from %s" % str(from_addr))
+
+                        with node_mgr.lock:
+                            # If we already had this client, close previous and
+                            # update with new.  We are expecting only one
+                            # connection from any given unique IP.  We are
+                            # doing this so if the connection fails we can
+                            # re-associate to the same test node.  It is
+                            # possible both ends are up and functional
+                            # and the network goes down/up etc.
+                            nc = Node(connection, from_addr)
+
+                            client_ip = from_addr[0]
+                            if client_ip in node_mgr.known_clients:
+                                node_mgr.known_clients[client_ip].replace(nc)
+                            else:
+                                node_mgr.known_clients[client_ip] = nc
+
+                    # If all the nodes are doing nothing, lets ping them to
+                    # ensure they still are present and responding
                     with node_mgr.lock:
-                        # If we already had this client, close previous and
-                        # update with new.  We are expecting only one connection
-                        # from any given unique IP.  We are doing this so if the
-                        # connection fails we can re-associate to the same test
-                        # node.  It is possible both ends are up and functional
-                        # and the network goes down/up etc.
-                        nc = Node(connection, from_addr)
-
-                        client_ip = from_addr[0]
-                        if client_ip in node_mgr.known_clients:
-                            node_mgr.known_clients[client_ip].replace(nc)
-                        else:
-                            node_mgr.known_clients[client_ip] = nc
-
-                # If all the nodes are doing nothing, lets ping them to ensure
-                # they still are present and responding
-                with node_mgr.lock:
-                    for i in node_mgr.known_clients.values():
-                        i.verify()
+                        for i in node_mgr.known_clients.values():
+                            i.verify()
 
             except KeyboardInterrupt:
-                bindsocket.close()
+                _try_close(bindsocket)
                 sys.exit(1)
+            except ssl.SSLError as ssle:
+                # We get these errors when someone port scan and tries to
+                # connect
+                _try_close(new_socket)
+                print("SSL error: Rejecting %s for %s" %
+                      (str(from_addr), str(ssle)))
             except:
                 p(str(traceback.format_exc()))
+                _try_close(connection)
+                _try_close(new_socket)
+
         p('Exiting node manager thread...')
 
 
