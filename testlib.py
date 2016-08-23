@@ -419,18 +419,3 @@ class NodeManager(object):
                 _try_close(new_socket)
 
         p('Exiting node manager thread...')
-
-
-def get_client_socket(server_ip, port=PORT):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    ssl_sock = ssl.wrap_socket(s,
-                               ca_certs="server_cert.pem",
-                               cert_reqs=ssl.CERT_REQUIRED,
-
-                               certfile="client_cert.pem",
-                               keyfile="client_key.pem"
-                               )
-
-    ssl_sock.connect((server_ip, port))
-    return ssl_sock
