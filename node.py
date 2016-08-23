@@ -321,10 +321,14 @@ if __name__ == "__main__":
 
         if node.connect():
             # noinspection PyBroadException
+            testlib.p("Connected!")
             try:
                 while True:
                     request = node.wait_for_request()
                     process_request(node, request)
+            except KeyboardInterrupt:
+                node.disconnect()
+                sys.exit(0)
             except Exception:
                 testlib.p(str(traceback.format_exc()))
                 pass
