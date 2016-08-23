@@ -92,6 +92,12 @@ def _load_config():
     with open(cfg, 'r') as array_data:
         config = yaml.safe_load(array_data.read())
 
+    # If the user didn't specify a full path in the configuration file we
+    # expect it in the same directory as this file
+    if config['PROGRAM'][0] != '/':
+        config['PROGRAM'] = os.path.dirname(os.path.realpath(__file__)) + \
+                            '/' + config['PROGRAM']
+
     # Lets make sure import external files/directories are present
     if not os.path.exists(config['PROGRAM']):
         print("config PROGRAM %s does not exist" % config['PROGRAM'])
