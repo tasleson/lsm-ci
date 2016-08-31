@@ -199,6 +199,9 @@ class Node(object):
         return resp
 
     def __init__(self, accepted_socket, from_addr):
+        # If we get here we have an authenticated client, lets give them some
+        # wiggle room before we disconnect them.
+        accepted_socket.settimeout(3 * 60)
         self._state = Node.READY
         self.s = accepted_socket
         self.t = Transport(accepted_socket)
