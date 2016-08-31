@@ -79,9 +79,14 @@ def _print_error(req, msg):
 
 def _log_write(node, job_id):
     data = node.job_completion(job_id)
-    if data:
-        with open(ERROR_LOG_DIR + '/' + job_id + '.html', 'w') as log_file:
-            log_file.write(data)
+
+    if not data:
+        # Node is down, not much to say here!
+        data = "Unable to retrieve log, node not unavailable!"
+
+    with open(ERROR_LOG_DIR + '/' + job_id + '.html', 'w') as log_file:
+        log_file.write(data)
+
 
 
 def _log_read(fn):
