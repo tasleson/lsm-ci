@@ -142,10 +142,10 @@ class TestNode(object):
         self.port = port
         self.use_proxy = use_proxy
         if proxy_is_ip:
-            self.proxy_host=proxy_host
+            self.proxy_host = proxy_host
         else:
-            self.proxy_host=socket.gethostbyname(proxy_host)
-        self.proxy_port=proxy_port
+            self.proxy_host = socket.gethostbyname(proxy_host)
+        self.proxy_port = proxy_port
         self.s = None
         self.t = None
 
@@ -160,14 +160,14 @@ class TestNode(object):
             self.s.settimeout(3 * 60)
 
             if self.use_proxy:
-                p("Using proxy %s:%s"%(self.proxy_host,self.proxy_port))
-                proxy_msg='CONNECT %s:%s HTTP/1.1\r\n\r\n'%(self.server_ip,
-                                                            self.port)
-                self.s.connect((self.proxy_host,self.proxy_port))
+                p("Using proxy %s:%s" % (self.proxy_host, self.proxy_port))
+                proxy_msg = 'CONNECT %s:%s HTTP/1.1\r\n\r\n' % \
+                            (self.server_ip, self.port)
+                self.s.connect((self.proxy_host, self.proxy_port))
                 self.s.sendall(proxy_msg)
-                response=self.s.recv(8192)
-                status=response.split()[1]
-            
+                response = self.s.recv(8192)
+                status = response.split()[1]
+
                 if status != str(200):
                     raise IOError("Connection to proxy failed")
 
