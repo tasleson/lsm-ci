@@ -90,7 +90,7 @@ def _load_config():
     global config
     cfg = os.path.dirname(os.path.realpath(__file__)) + "/" + "config.yaml"
     with open(cfg, 'r') as array_data:
-        config = yaml.safe_load(array_data.read())
+        config = yaml.load(array_data.read())
 
     # If the user didn't specify a full path in the configuration file we
     # expect it in the same directory as this file
