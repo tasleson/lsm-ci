@@ -326,8 +326,8 @@ if __name__ == "__main__":
                                 proxy_port=proxy_port)
 
         if node.connect():
-            # noinspection PyBroadException
             testlib.p("Connected!")
+            # noinspection PyBroadException
             try:
                 while True:
                     request = node.wait_for_request()

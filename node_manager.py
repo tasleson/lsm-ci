@@ -88,7 +88,6 @@ def _log_write(node, job_id):
         log_file.write(data)
 
 
-
 def _log_read(fn):
     data = ""
     # Ensure file name is matches are expectations
