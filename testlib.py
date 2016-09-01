@@ -120,8 +120,8 @@ class Transport(object):
 
 def p(msg):
     ts = datetime.datetime.fromtimestamp(
-        time.time()).strftime('%Y-%m-%d %H:%M:%S')
-    print("%s:%d:%s" % (ts, os.getpid(), msg))
+        time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')
+    print("%s: pid: %d: %s" % (ts, os.getpid(), msg))
     sys.stdout.flush()
 
 
