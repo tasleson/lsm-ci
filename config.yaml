@@ -9,7 +9,10 @@ LOGDIR: /tmp/unit
 # What is being executed 
 PROGRAM: <some program>
 
-# User name and password to talk to the unit_test.py service, http basic auth
-# use over https!
-USER: <some user>
-PASSWORD: <some password>
+# Server and port
+SERVER_IP: 'localhost'
+SERVER_PORT: 443
+PROXY_IS_IP:  True
+USE_PROXY: False
+PROXY_HOST: 'localhost'
+PROXY_PORT: 8080
