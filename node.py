@@ -315,9 +315,15 @@ if __name__ == "__main__":
     while True:
         server = config['SERVER_IP']
         port = config['SERVER_PORT']
+        proxy_is_ip = config['PROXY_IS_IP']
+        use_proxy = config['USE_PROXY']
+        proxy_host = config['PROXY_HOST']
+        proxy_port = config['PROXY_PORT']
 
         testlib.p("Attempting connection to %s:%d" % (server, port))
-        node = testlib.TestNode(server, port)
+        node = testlib.TestNode(server, port, use_proxy=use_proxy,
+                                proxy_is_ip=proxy_is_ip, proxy_host=proxy_host,
+                                proxy_port=proxy_port)
 
         if node.connect():
             # noinspection PyBroadException

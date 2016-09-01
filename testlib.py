@@ -136,9 +136,16 @@ def _try_close(s):
 
 class TestNode(object):
 
-    def __init__(self, server_ip, port=PORT):
+    def __init__(self, server_ip, port=PORT, use_proxy=False, proxy_is_ip=True,
+                 proxy_host=None, proxy_port=None):
         self.server_ip = server_ip
         self.port = port
+        self.use_proxy = use_proxy
+        if proxy_is_ip == True:
+            self.proxy_host=proxy_host
+        else:
+            self.proxy_host=socket.gethostbyname(proxy_host)
+        self.proxy_port=proxy_port
         self.s = None
         self.t = None
 
@@ -151,6 +158,19 @@ class TestNode(object):
             # for up to 3 minutes waiting for one, otherwise we will error out
             # with a timeout on the read.
             self.s.settimeout(3 * 60)
+
+            if self.use_proxy == True:
+                p("Using proxy %s:%s"%(self.proxy_host,self.proxy_port))
+                proxy_msg='CONNECT %s:%s HTTP/1.1\r\n\r\n'%(self.server_ip,
+                                                            self.port)
+                self.s.connect((self.proxy_host,self.proxy_port))
+                self.s.sendall(proxy_msg)
+                response=self.s.recv(8192)
+                status=response.split()[1]
+            
+                if status != str(200):
+                    raise IOError("Connection to proxy failed")
+
             self.s = ssl.wrap_socket(self.s,
                                      ca_certs="server_cert.pem",
                                      cert_reqs=ssl.CERT_REQUIRED,
@@ -158,7 +178,10 @@ class TestNode(object):
                                      keyfile="client_key.pem"
                                      )
 
-            self.s.connect((self.server_ip, self.port))
+            if self.use_proxy == True:
+                self.s.do_handshake()
+            else:
+                self.s.connect((self.server_ip, self.port))
 
             self.t = Transport(self.s)
         except Exception as e:
