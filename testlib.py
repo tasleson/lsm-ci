@@ -141,7 +141,7 @@ class TestNode(object):
         self.server_ip = server_ip
         self.port = port
         self.use_proxy = use_proxy
-        if proxy_is_ip == True:
+        if proxy_is_ip:
             self.proxy_host=proxy_host
         else:
             self.proxy_host=socket.gethostbyname(proxy_host)
@@ -159,7 +159,7 @@ class TestNode(object):
             # with a timeout on the read.
             self.s.settimeout(3 * 60)
 
-            if self.use_proxy == True:
+            if self.use_proxy:
                 p("Using proxy %s:%s"%(self.proxy_host,self.proxy_port))
                 proxy_msg='CONNECT %s:%s HTTP/1.1\r\n\r\n'%(self.server_ip,
                                                             self.port)
@@ -178,7 +178,7 @@ class TestNode(object):
                                      keyfile="client_key.pem"
                                      )
 
-            if self.use_proxy == True:
+            if self.use_proxy:
                 self.s.do_handshake()
             else:
                 self.s.connect((self.server_ip, self.port))
