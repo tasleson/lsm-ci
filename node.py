@@ -264,7 +264,7 @@ class Cmds(object):
             log = _file_name(job_id)
             if j['STATUS'] != "RUNNING":
                 with open(log, 'r') as foo:
-                    result = yaml.safe_load(foo.read())
+                    result = yaml.load(foo.read())
                 return json.dumps(result), 200, ""
             else:
                 return "", 400, "Job still running"
