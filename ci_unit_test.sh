@@ -74,7 +74,7 @@ function run_test
 
 # When we exit we are going to clean up what we created so we don't fill
 # the FS up, comment this out if we need the files around to debug
-# trap cleanup EXIT
+trap cleanup EXIT
 
 # Make the needed directories, but don't make the destination directory for
 # argument 1 for lsm_test_base_install as it wants to create it
