@@ -89,7 +89,7 @@ def _log_write(node, job_id):
         delete_log = True
 
     with open(ERROR_LOG_DIR + '/' + job_id + '.html', 'w') as log_file:
-        log_file.write(data)
+        log_file.write(data.encode('utf-8'))
 
     # Delete the job from the node
     if delete_log:
