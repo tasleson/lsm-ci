@@ -149,15 +149,18 @@ def trusted_repo(info):
             trusted = yaml.load(tdata.read())
 
         if info['clone'] in trusted['REPOS']:
+            _create_status(info["repo"], info['sha'], 'success',
+                           'Repo trusted',
+                           'CI permissions')
             return True
         else:
             _create_status(info["repo"], info['sha'], 'failure',
                            'Repo untrusted',
-                           'CI run aborted')
+                           'CI permissions')
     else:
         _create_status(info["repo"], info['sha'], 'failure',
                        'WL unavailable!',
-                       'CI run aborted')
+                       'CI permissions')
     return False
 
 
