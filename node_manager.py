@@ -23,6 +23,7 @@ import re
 from collections import deque
 import json
 import copy
+import yaml
 
 
 pp = pprint.PrettyPrinter(depth=4)
@@ -45,6 +46,9 @@ ERROR_LOG_DIR = os.getenv('CI_LOG_DIR', '/tmp/ci_log')
 # Where to find the logs, this is the url in the github status update when
 # we have an error
 CI_SERVICE_URL = os.getenv('CI_URL', 'http://%s:%s/log' % (HOST, PORT))
+
+# The file with trusted repos in it
+TRUSTED_REPO_FN = os.getenv('TRUSTED_REPOS', '')
 
 # File name for log file which is retrievable by client
 f_name = re.compile('[a-z]{32}\.html')
@@ -137,11 +141,36 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
         _print_error(r, "Unexpected error on setting status ")
 
 
+def trusted_repo(info):
+    # We are opening the file each time, so we can update it without restarting
+    # the service.
+    if os.path.exists(TRUSTED_REPO_FN) and os.path.isfile(TRUSTED_REPO_FN):
+        with open(TRUSTED_REPO_FN, 'r') as tdata:
+            trusted = yaml.load(tdata.read())
+
+        if info['clone'] in trusted['REPOS']:
+            return True
+        else:
+            _create_status(info["repo"], info['sha'], 'failure',
+                           'Repo untrusted',
+                           'CI run aborted')
+    else:
+        _create_status(info["repo"], info['sha'], 'failure',
+                       'WL unavailable!',
+                       'CI run aborted')
+    return False
+
+
 def run_tests(info):
     # As nodes can potentially come/go with errors we will get a list of what
     # we started with and will try to utilize them and only them for the
     # duration of the test
     connected_nodes = node_mgr.nodes()
+
+    # Lets do a whitelist check, to ensure only those users who we trust are
+    # going to get automated unit tests run.
+    if not trusted_repo(info):
+        return
 
     _p("Setting status @ github to pending")
     for n in connected_nodes:
