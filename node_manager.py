@@ -134,7 +134,7 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
     if log_url:
         data["target_url"] = log_url
 
-    r = _post_with_retries(url, data, (HOST, TOKEN))
+    r = _post_with_retries(url, data, (USER, TOKEN))
     if r.status_code == 201:
         _p('We updated status url=%s data=%s' % (str(url), str(data)))
     else:
