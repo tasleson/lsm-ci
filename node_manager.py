@@ -323,6 +323,20 @@ def stats():
     return json.dumps(dict(QUEUE_SIZE=req_q.qsize()))
 
 
+@route('/queue')
+def queue():
+    rc = []
+    response.content_type = 'application/json'
+
+    wq = list(req_q.queue)
+    for i in wq:
+        item = copy.deepcopy(i)
+        del item['sha']
+        rc.append(item)
+
+    return json.dumps(rc)
+
+
 # A URL is given back to github on error, clients web browsers will call this
 # link to get the log file
 @route('/log/<log_file>')
