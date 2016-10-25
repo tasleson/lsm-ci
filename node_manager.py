@@ -428,8 +428,16 @@ def e_handler():
         branch = request.json["pull_request"]['head']['ref']
 
         _p('Queuing unit tests for %s %s' % (clone, branch))
-        req_q.put(dict(repo=repo, sha=sha, branch=branch, clone=clone,
-                       test_run_id=test_count))
+
+        info = dict(repo=repo, sha=sha, branch=branch, clone=clone,
+                       test_run_id=test_count)
+
+        # Lets immediately set something on the PR so that people looking at
+        # the PR see that the service is aware of it.
+        _create_status(info["repo"], info['sha'], 'pending',
+                       'CI requested, #waiting = %d' % req_q.qsize(),
+                       'CI permissions')
+        req_q.put(info)
 
         test_count += 1
     else:
