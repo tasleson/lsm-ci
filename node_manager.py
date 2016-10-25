@@ -62,6 +62,9 @@ req_q = Queue.Queue()
 
 test_count = 0
 
+processing = None
+processing_mutex = threading.Lock()
+
 
 def _post_with_retries(url, data, auth):
     for i in range(0, 10):
@@ -277,11 +280,22 @@ def _verify_signature(payload_body, header_signature):
 
 # Thread that runs taking work off of the request queue and processing it
 def request_queue():
+    global processing
+    global processing_mutex
+
     while testlib.RUN.value:
+
         # noinspection PyBroadException
         try:
             info = req_q.get(True, 3)
+
+            with processing_mutex:
+                processing = info
+
             run_tests(info)
+
+            with processing_mutex:
+                processing = None
         except Queue.Empty:
             pass
         except Exception:
@@ -297,9 +311,22 @@ def completed_requests():
     response.content_type = 'application/json'
 
     for i in c_r:
-        item = copy.deepcopy(i)
-        del item['sha']
-        rc.append(item)
+        rc.append(i)
+
+    return json.dumps(rc)
+
+
+@route('/processing')
+def completed_requests():
+    global processing
+    global processing_mutex
+    rc = []
+
+    response.content_type = 'application/json'
+
+    with processing_mutex:
+        if processing:
+            rc.append(processing)
 
     return json.dumps(rc)
 
@@ -362,9 +389,7 @@ def queue():
 
     wq = list(req_q.queue)
     for i in wq:
-        item = copy.deepcopy(i)
-        del item['sha']
-        rc.append(item)
+        rc.append(i)
 
     return json.dumps(rc)
 
