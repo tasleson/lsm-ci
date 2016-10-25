@@ -50,6 +50,12 @@ CI_SERVICE_URL = os.getenv('CI_URL', 'http://%s:%s/log' % (HOST, PORT))
 # The file with trusted repos in it
 TRUSTED_REPO_FN = os.getenv('TRUSTED_REPOS', '')
 
+# Full path to trusted file on repo itself
+TRUSTED_REPO_REMOTE = os.getenv(
+    'TRUSTED_REPOS_REMOTE',
+    'https://raw.githubusercontent.com/' +
+    'libstorage/libstoragemgmt/master/test/trusted.yaml')
+
 # File name for log file which is retrievable by client
 f_name = re.compile('[a-z]{32}\.html')
 
@@ -147,9 +153,21 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
 def trusted_repo(info):
     # We are opening the file each time, so we can update it without restarting
     # the service.
-    if os.path.exists(TRUSTED_REPO_FN) and os.path.isfile(TRUSTED_REPO_FN):
-        with open(TRUSTED_REPO_FN, 'r') as tdata:
-            trusted = yaml.load(tdata.read())
+
+    trusted = {}
+
+    # Lets fetch the file from the master repo if it exists, otherwise we will
+    # use our local copy.
+    try:
+        result = requests.get(TRUSTED_REPO_REMOTE)
+
+        if result.status_code == 200:
+            trusted = yaml.load(result.text)
+        else:
+            if os.path.exists(TRUSTED_REPO_FN) and \
+                    os.path.isfile(TRUSTED_REPO_FN):
+                with open(TRUSTED_REPO_FN, 'r') as tdata:
+                    trusted = yaml.load(tdata.read())
 
         if info['clone'] in trusted['REPOS']:
             _create_status(info["repo"], info['sha'], 'success',
@@ -160,7 +178,8 @@ def trusted_repo(info):
             _create_status(info["repo"], info['sha'], 'failure',
                            'Repo untrusted',
                            'CI permissions')
-    else:
+    except Exception as e:
+        _p('Unable to retrieve trusted repo list! %s' % str(e))
         _create_status(info["repo"], info['sha'], 'failure',
                        'WL unavailable!',
                        'CI permissions')
