@@ -147,7 +147,8 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
     if r.status_code == 201:
         _p('We updated status url=%s data=%s' % (str(url), str(data)))
     else:
-        _print_error(r, "Unexpected error on setting status ")
+        _print_error(r, "Unexpected error on setting status url=%s data=%s "
+                     % (str(url), str(data)))
 
 
 def trusted_repo(info):
