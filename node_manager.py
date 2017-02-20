@@ -372,6 +372,10 @@ def rerun_test(test_id):
         if int(i['test_run_id']) == int(test_id):
             # Try to make the test counts unique
             cpy = copy.deepcopy(i)
+
+            _p('Re-running test: client IP %s: %s %s' %
+                (request.remote_addr, str(test_id), str(cpy)))
+
             cpy['test_run_id'] = test_count
             test_count += 1
             req_q.put(cpy)
