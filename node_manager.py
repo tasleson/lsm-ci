@@ -251,9 +251,6 @@ def run_tests(info):
                                        'Plugin = ' + plugin, array_id)
 
                         info['status'] = 'SUCCESS'
-
-                        # Delete the jobs
-                        n.job_delete(job_id)
                     else:
                         url = '%s/%s.html' % (CI_SERVICE_URL, job_id)
                         info['status'] = url
@@ -262,6 +259,9 @@ def run_tests(info):
                         _log_write(n, job_id)
                         _create_status(info["repo"], info['sha'], 'failure',
                                        'Plugin = ' + plugin, array_id, url)
+
+                    # Delete the job if it's not running.
+                    n.job_delete(job_id)
 
         time.sleep(5)
 
