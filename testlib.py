@@ -12,6 +12,7 @@ import threading
 import select
 import traceback
 import multiprocessing
+import ctypes
 
 
 PORT = 443
@@ -19,6 +20,8 @@ PORT = 443
 hs = os.getenv("LSM_CI_HASH_SALT", "")
 
 RUN = multiprocessing.Value('i', 1)
+
+print_lock = threading.Lock()
 
 
 def md5(t):
@@ -119,10 +122,12 @@ class Transport(object):
 
 
 def p(msg):
-    ts = datetime.datetime.fromtimestamp(
-        time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')
-    print("%s: pid: %d: %s" % (ts, os.getpid(), msg))
-    sys.stdout.flush()
+    with print_lock:
+        tid = ctypes.CDLL('libc.so.6').syscall(224)
+        ts = datetime.datetime.fromtimestamp(
+            time.time()).strftime('%Y-%m-%d %H:%M:%S.%f')
+        print("%s: %d:%d- %s" % (ts, os.getpid(), tid, msg))
+        sys.stdout.flush()
 
 
 def _try_close(s):
