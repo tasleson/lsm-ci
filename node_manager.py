@@ -162,6 +162,7 @@ def trusted_repo(info):
         result = requests.get(TRUSTED_REPO_REMOTE)
 
         if result.status_code == 200:
+            _p("Using github repo trusted file.")
             trusted = yaml.load(result.text)
         else:
             if os.path.exists(TRUSTED_REPO_FN) and \
