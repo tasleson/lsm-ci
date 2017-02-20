@@ -411,8 +411,6 @@ class NodeManager(object):
                             ca_certs="client_cert.pem",
                             cert_reqs=ssl.CERT_REQUIRED)
 
-                        p("Accepted a connection from %s" % str(from_addr))
-
                         with node_mgr.lock:
                             # If we already had this client, close previous and
                             # update with new.  We are expecting only one
@@ -423,10 +421,15 @@ class NodeManager(object):
                             # and the network goes down/up etc.
                             nc = Node(connection, from_addr)
 
+                            msg = "Accepted a connection from %s: arrays= %s" \
+                                    % (str(from_addr), str(nc.arrays()))
+
                             client_ip = from_addr[0]
                             if client_ip in node_mgr.known_clients:
+                                p("%s: previously known" % msg)
                                 node_mgr.known_clients[client_ip].replace(nc)
                             else:
+                                p("%s: new client connection" % msg)
                                 node_mgr.known_clients[client_ip] = nc
 
                     # If all the nodes are doing nothing, lets ping them to
