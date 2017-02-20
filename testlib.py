@@ -321,6 +321,8 @@ class Node(object):
             if resp and resp.ec != 200:
                 p("Error: Unable to delete job id = %s resp = %s" %
                     (job_id, str(resp)))
+            else:
+                p("Job %s deleted!" % job_id)
 
     def start_test(self, clone_url, branch, array_id):
         with self.lock:
