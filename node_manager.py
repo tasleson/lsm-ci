@@ -85,9 +85,9 @@ def _post_with_retries(url, data, auth):
 
 
 def _print_error(req, msg):
-    _p("%s status code = %d" % (msg, req.status_code))
-    pp.pprint(req.json())
-    sys.stdout.flush()
+    formatted_json = pp.pformat(req.json())
+    _p("%s status code = %d, \nJSON: \n%s\n" %
+        (msg, req.status_code, formatted_json))
 
 
 def _log_write(node, job_id):
