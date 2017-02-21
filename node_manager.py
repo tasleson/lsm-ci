@@ -91,22 +91,14 @@ def _print_error(req, msg):
 
 
 def _log_write(node, job_id):
-    delete_log = False
     data = node.job_completion(job_id)
 
     if not data:
         # Node is down, not much to say here!
         data = "Unable to retrieve log, node not unavailable or hitting a bug!"
-    else:
-        # We did retrieve the log file
-        delete_log = True
 
     with open(ERROR_LOG_DIR + '/' + job_id + '.html', 'w') as log_file:
         log_file.write(data.encode('utf-8'))
-
-    # Delete the job from the node
-    if delete_log:
-        node.job_delete(job_id)
 
 
 def _log_read(fn):
@@ -254,8 +246,7 @@ def run_tests(info):
                     else:
                         url = '%s/%s.html' % (CI_SERVICE_URL, job_id)
                         info['status'] = url
-                        # Fetch the error log, log write will delete the job
-                        # if it was able to retrieve the log data!
+                        # Fetch the error log, log error data and status
                         _log_write(n, job_id)
                         _create_status(info["repo"], info['sha'], 'failure',
                                        'Plugin = ' + plugin, array_id, url)
