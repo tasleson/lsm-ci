@@ -263,9 +263,22 @@ class Cmds(object):
             j = jobs[job_id]
             log = _file_name(job_id)
             if j['STATUS'] != "RUNNING":
-                with open(log, 'r') as foo:
-                    result = yaml.load(foo.read())
-                return json.dumps(result), 200, ""
+                try:
+                    with open(log, 'r') as foo:
+                        result = yaml.load(foo.read())
+                    return json.dumps(result), 200, ""
+                except:
+                    # We had a job in the hash, but an error while processing
+                    # the log file, we will return a 404 and make sure the
+                    # file is indeed gone
+                    try:
+                        del jobs[job_id]
+                        _remove_file(job_id)
+                    except:
+                        # These aren't the errors you're looking for..., move
+                        # along...
+                        pass
+                    return "", 404, "Job log file not found"
             else:
                 return "", 400, "Job still running"
         else:
