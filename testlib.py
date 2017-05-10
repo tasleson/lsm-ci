@@ -13,6 +13,7 @@ import select
 import traceback
 import multiprocessing
 import ctypes
+import signal
 
 
 PORT = 443
@@ -380,7 +381,15 @@ class NodeManager(object):
     @staticmethod
     def main_event_loop(node_mgr):
         # Setup the listening socket
-        bindsocket = NodeManager._setup_listening(node_mgr.ip, node_mgr.port)
+        try:
+            bindsocket = NodeManager._setup_listening(node_mgr.ip,
+                                                      node_mgr.port)
+        except:
+            p(str(traceback.format_exc()))
+            p('Unable to setup listening socket (%s:%d), shutting down' %
+              (node_mgr.ip, node_mgr.port))
+            RUN.value = 0
+            os.kill(os.getpid(), signal.SIGINT)
 
         while RUN.value:
 

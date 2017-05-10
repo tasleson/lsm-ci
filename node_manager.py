@@ -314,6 +314,8 @@ def request_queue():
             st = traceback.format_exc()
             _p("request_queue: unexpected exception: %s" % (st))
 
+    _p('Exiting request_queue')
+
 
 @route('/completed')
 def completed_requests():
