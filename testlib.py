@@ -16,7 +16,8 @@ import ctypes
 import signal
 
 
-PORT = 443
+# What port the clients will try to connect to
+PORT = int(os.getenv("LSM_CI_CLIENT_PORT", 443))
 
 hs = os.getenv("LSM_CI_HASH_SALT", "")
 
