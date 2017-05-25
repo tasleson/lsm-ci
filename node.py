@@ -34,10 +34,16 @@ from multiprocessing import Process
 import testlib
 import time
 import traceback
+import tempfile
+import shutil
 
 
 jobs = {}
 config = {}
+
+STARTUP_CWD = ""
+
+NODE = None
 
 
 def _lcall(command, job_id):
@@ -100,14 +106,14 @@ def _load_config():
 
     # Lets make sure import external files/directories are present
     if not os.path.exists(config['PROGRAM']):
-        print("config PROGRAM %s does not exist" % config['PROGRAM'])
+        testlib.p("config PROGRAM %s does not exist" % config['PROGRAM'])
         sys.exit(1)
 
     if not (os.path.exists(config['LOGDIR']) and
             os.path.isdir(config['LOGDIR']) and
             os.access(config['LOGDIR'], os.W_OK)):
-        print("config LOGDIR not preset or not a "
-              "directory %s or not writeable" % (config['LOGDIR']))
+        testlib.p("config LOGDIR not preset or not a "
+                  "directory %s or not writeable" % (config['LOGDIR']))
         sys.exit(1)
 
 
@@ -303,8 +309,104 @@ class Cmds(object):
         else:
             return "", 404, "Job not found"
 
+    # Return the md5 for a list of files, the file cannot contain any '/' and
+    # we are restricting it to the same directory as the node.py executing
+    # directory as we are only expecting to check files in the same directory.
+    # Returns an array of md5sums in the order the files were given to us.
+    @staticmethod
+    def md5_files(files):
+        rc = []
 
-def process_request(n, req):
+        for file_name in files:
+            if '/' in file_name:
+                return rc, 412, 'File %s contains illegal character' % file_name
+
+            full_fn = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                   file_name)
+            if os.path.exists(full_fn) and os.path.isfile(full_fn):
+                rc.append(testlib.file_md5(full_fn))
+            else:
+                # If a file doesn't exist lets return a bogus value, then the
+                # server will push the new file down.
+                rc.append('File not found!')
+
+        return rc, 200, ""
+
+    @staticmethod
+    def _update_files(tmp_dir, file_data):
+        src_files = []
+
+        # Dump the file locally to temp directory
+        for i in file_data:
+            fn = i['fn']
+            data = i['data']
+            md5 = i['md5']
+
+            if '/' in fn:
+                return "", 412, "File name has directory sep. in it! %s" % fn
+
+            tmp_file = os.path.join(tmp_dir, fn)
+
+            with open(tmp_file, 'w') as t:
+                t.write(data)
+
+            if md5 != testlib.file_md5(tmp_file):
+                return "", 412, "md5 miss-match for %s" % tmp_file
+
+            src_files.append(tmp_file)
+
+        # Move the files into position
+        for src_path_name in src_files:
+            perms = None
+            name = os.path.basename(src_path_name)
+            dest_path_name = os.path.join(
+                                os.path.dirname(os.path.realpath(__file__)),
+                                name)
+
+            # Before we move, lets store off the perms, so we can restore them
+            # after the move
+            if os.path.exists(dest_path_name):
+                perms = (os.stat(dest_path_name).st_mode & 0777)
+
+            testlib.p('Moving: %s -> %s' % (src_path_name, dest_path_name))
+            shutil.move(src_path_name, dest_path_name)
+
+            if perms:
+                testlib.p('Setting perms: %s %s' % (dest_path_name, oct(perms)))
+                os.chmod(dest_path_name, perms)
+
+        return "", 200, ""
+
+    # Given a file_name, the file_contents and the md5sum for the file we will
+    # dump the file contents to a tmp file, validate the md5 and if all is well
+    # we will replace the file_name with it.
+    @staticmethod
+    def update_files(file_data):
+        # Create a temp directory
+        td = tempfile.mkdtemp()
+
+        testlib.p('Updating client files!')
+
+        try:
+            result = Cmds._update_files(td, file_data)
+        except:
+            result = "", 412, "Exception on file update %s " % \
+                     str(traceback.format_exc())
+
+        # Remove tmp directory and the files we left in it
+        shutil.rmtree(td)
+        return result
+
+    @staticmethod
+    def restart():
+        global NODE
+        testlib.p('Restarting node as requested by node_manager')
+        os.chdir(STARTUP_CWD)
+        NODE.disconnect()
+        os.execl(sys.executable, *([sys.executable] + sys.argv))
+
+
+def process_request(req):
     data = ""
     ec = 0
     error_msg = ""
@@ -314,14 +416,16 @@ def process_request(n, req):
             data, ec, error_msg = getattr(Cmds, req.method)(*req.args)
         else:
             data, ec, error_msg = getattr(Cmds, req.method)()
-        n.return_response(testlib.Response(data, ec, error_msg))
+        NODE.return_response(testlib.Response(data, ec, error_msg))
     else:
         # Bounce this back to the requester
-        n.return_response(testlib.Response("", 404, "Command not found!"))
+        NODE.return_response(testlib.Response("", 404, "Command not found!"))
 
 
 if __name__ == "__main__":
     # Load the available test arrays from config file
+    STARTUP_CWD = os.getcwd()
+
     _load_config()
 
     # Connect to server
@@ -334,26 +438,26 @@ if __name__ == "__main__":
         proxy_port = config['PROXY_PORT']
 
         testlib.p("Attempting connection to %s:%d" % (server, port))
-        node = testlib.TestNode(server, port, use_proxy=use_proxy,
+        NODE = testlib.TestNode(server, port, use_proxy=use_proxy,
                                 proxy_is_ip=proxy_is_ip, proxy_host=proxy_host,
                                 proxy_port=proxy_port)
 
-        if node.connect():
+        if NODE.connect():
             testlib.p("Connected!")
             # noinspection PyBroadException
             try:
                 while True:
-                    request = node.wait_for_request()
-                    process_request(node, request)
+                    request = NODE.wait_for_request()
+                    process_request(request)
             except KeyboardInterrupt:
-                node.disconnect()
+                NODE.disconnect()
                 sys.exit(0)
             except Exception:
                 testlib.p(str(traceback.format_exc()))
                 pass
 
             # This probably won't do much as socket is quite likely toast
-            node.disconnect()
+            NODE.disconnect()
 
         # If we get here we need to re-establish connection, make sure we don't
         # swamp the processor

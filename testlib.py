@@ -13,15 +13,32 @@ import select
 import traceback
 import multiprocessing
 import ctypes
+import signal
 
 
-PORT = 443
+# What port the clients will try to connect to
+PORT = int(os.getenv("LSM_CI_CLIENT_PORT", 443))
 
 hs = os.getenv("LSM_CI_HASH_SALT", "")
 
 RUN = multiprocessing.Value('i', 1)
 
 print_lock = threading.Lock()
+
+
+def _file_data(file_name):
+    with open(file_name, 'r') as file_to_check:
+        file_contents = file_to_check.read()
+    return file_contents
+
+
+def file_md5(file_name):
+    return md5(_file_data(file_name))
+
+
+def file_md5_and_data(file_name):
+    fd = _file_data(file_name)
+    return md5(fd), fd
 
 
 def md5(t):
@@ -333,6 +350,36 @@ class Node(object):
                 p('Error: when creating job: %s' % str(resp))
             return None
 
+    def get_file_md5(self, file_list):
+        with self.lock:
+            resp = self._rpc('md5_files', (file_list, ))
+            if resp and resp.ec == 200:
+                return resp.result
+            else:
+                p('Error when retrieving md5sums %s' % str(resp))
+            return None
+
+    def update_files(self, file_list):
+        # For each file in the file list, load it into memory, md5 it and
+        # send it to the client!
+        pushed_files = []
+
+        for f in file_list:
+            fn = os.path.join(os.path.dirname(os.path.realpath(__file__)), f)
+            md5_sum, data = file_md5_and_data(fn)
+            pushed_files.append(dict(fn=f, md5=md5_sum, data=data))
+
+        resp = self._rpc('update_files', (pushed_files, ))
+        if resp and resp.ec == 200:
+            return True
+
+        p('Error when updating files! %s' % str(resp))
+        return False
+
+    def restart(self):
+        # The node doesn't respond with a msg on a restart!
+        self._rpc('restart')
+
 
 class NodeManager(object):
     """
@@ -380,7 +427,15 @@ class NodeManager(object):
     @staticmethod
     def main_event_loop(node_mgr):
         # Setup the listening socket
-        bindsocket = NodeManager._setup_listening(node_mgr.ip, node_mgr.port)
+        try:
+            bindsocket = NodeManager._setup_listening(node_mgr.ip,
+                                                      node_mgr.port)
+        except:
+            p(str(traceback.format_exc()))
+            p('Unable to setup listening socket (%s:%d), shutting down' %
+              (node_mgr.ip, node_mgr.port))
+            RUN.value = 0
+            os.kill(os.getpid(), signal.SIGINT)
 
         while RUN.value:
 
@@ -434,6 +489,8 @@ class NodeManager(object):
                                 p("%s: new client connection" % msg)
                                 node_mgr.known_clients[client_ip] = nc
 
+                            NodeManager.check_for_updates(nc)
+
                     # If all the nodes are doing nothing, lets ping them to
                     # ensure they still are present and responding
                     with node_mgr.lock:
@@ -447,11 +504,43 @@ class NodeManager(object):
                 # We get these errors when someone port scan and tries to
                 # connect
                 _try_close(new_socket)
-                print("SSL error: Rejecting %s for %s" %
-                      (str(from_addr), str(ssle)))
+                p("SSL error: Rejecting %s for %s" %
+                    (str(from_addr), str(ssle)))
             except:
                 p(str(traceback.format_exc()))
                 _try_close(connection)
                 _try_close(new_socket)
 
         p('Exiting node manager thread...')
+
+    @staticmethod
+    def check_for_updates(node):
+        # Get the current signatures of the files we have and compare it to
+        # the ones on the node, if they don't match push them down and restart
+        # the client
+        p('Checking for updates')
+        local_signatures = []
+
+        files = ['node.py', 'testlib.py', 'ci_unit_test.sh']
+
+        for f in files:
+            local_signatures.append(file_md5(f))
+
+        remote_signatures = node.get_file_md5(files)
+        if remote_signatures:
+            if local_signatures != remote_signatures:
+                p('Updating client!')
+                for i, fn in enumerate(files):
+                    if local_signatures[i] != remote_signatures[i]:
+                        p('File %s local= %s remote= %s' %
+                            (fn, local_signatures[i], remote_signatures[i]))
+
+                if node.update_files(files):
+                    remote_signatures = node.get_file_md5(files)
+                    if local_signatures == remote_signatures:
+                        node.restart()
+                    else:
+                        p("After updating files we have a md5 miss-match,"
+                          " not restarting client!")
+            else:
+                p('Client is current!')
