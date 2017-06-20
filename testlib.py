@@ -425,6 +425,10 @@ class NodeManager(object):
         return bindsocket
 
     @staticmethod
+    def _client_id(ip_address, arrays):
+        return ip_address + '-' + '-'.join([i[0] for i in arrays])
+
+    @staticmethod
     def main_event_loop(node_mgr):
         # Setup the listening socket
         try:
@@ -478,16 +482,21 @@ class NodeManager(object):
                             # and the network goes down/up etc.
                             nc = Node(connection, from_addr)
 
-                            msg = "Accepted a connection from %s: arrays= %s" \
-                                    % (str(from_addr), str(nc.arrays()))
+                            arrays = sorted(nc.arrays())
 
-                            client_ip = from_addr[0]
-                            if client_ip in node_mgr.known_clients:
-                                p("%s: previously known" % msg)
-                                node_mgr.known_clients[client_ip].replace(nc)
+                            msg = "Accepted a connection from %s: arrays= %s" \
+                                    % (str(from_addr), str(arrays))
+
+                            client_id = NodeManager._client_id(
+                                from_addr[0], arrays)
+
+                            if client_id in node_mgr.known_clients:
+                                p("%s: previously known %s" % (msg, client_id))
+                                node_mgr.known_clients[client_id].replace(nc)
                             else:
-                                p("%s: new client connection" % msg)
-                                node_mgr.known_clients[client_ip] = nc
+                                p("%s: new client connection %s" % (msg,
+                                                                    client_id))
+                                node_mgr.known_clients[client_id] = nc
 
                             NodeManager.check_for_updates(nc)
 
