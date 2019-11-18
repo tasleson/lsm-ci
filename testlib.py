@@ -148,12 +148,12 @@ def p(msg):
 
 
 def _try_close(s):
-        # noinspection PyBroadException
-        try:
-            if s:
-                s.close()
-        except Exception:
-            pass
+    # noinspection PyBroadException
+    try:
+        if s:
+            s.close()
+    except Exception:
+        pass
 
 
 class TestNode(object):
