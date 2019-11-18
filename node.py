@@ -60,7 +60,13 @@ def _lcall(command, job_id):
 
 
 def _file_name(job_id):
-    base = '%s/%s' % (config["LOGDIR"], job_id)
+    # If this log directory is located in /tmp, the system may remove the
+    # directory after a while, making us fail to log when needed.
+    log_dir = config["LOGDIR"]
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    base = '%s/%s' % (log_dir, job_id)
     return base + ".out"
 
 
