@@ -356,7 +356,7 @@ def completed_requests():
 
 
 @route('/processing')
-def completed_requests():
+def processing_requests():
     """
     Handles the request for what is in processing.
     :return: JSON
