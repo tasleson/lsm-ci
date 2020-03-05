@@ -132,14 +132,14 @@ class Transport(object):
     def __init__(self, s):
         self.s = s
 
-    def _read_all(self, l):
+    def _read_all(self, num_bytes):
         # Reads the specified number of bytes from socket
-        if l < 1:
+        if num_bytes < 1:
             raise ValueError("Trying to read less than 1 byte!")
 
         data = bytearray()
-        while len(data) < l:
-            amount_read = self.s.recv(l - len(data))
+        while len(data) < num_bytes:
+            amount_read = self.s.recv(num_bytes - len(data))
             if not amount_read:
                 raise IOError("Shorted read")
             data += amount_read
