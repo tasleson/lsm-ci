@@ -244,7 +244,7 @@ class TestNode(object):
                 proxy_msg = 'CONNECT %s:%s HTTP/1.1\r\n\r\n' % \
                             (self.server_ip, self.port)
                 self.s.connect((self.proxy_host, self.proxy_port))
-                self.s.sendall(proxy_msg)
+                self.s.sendall(proxy_msg.encode("utf-8"))
                 response = self.s.recv(8192)
                 status = response.split()[1]
 
