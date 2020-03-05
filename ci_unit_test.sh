@@ -54,7 +54,7 @@ function good
 function run_test
 {
     good ./autogen.sh
-    good ./configure $1
+    good ./configure "$1"
     good make
 
     # Source in the helpers functions that are included with the source tree
@@ -64,7 +64,7 @@ function run_test
     lsm_test_base_install "${run_dir_rand}" "${src_dir}" "${src_dir}" \
         "${LSM_TEST_INSTALL_ALL_PLUGINS}"
 
-    lsm_test_lsmd_start ${LSM_TEST_WITHOUT_MEM_CHECK}
+    lsm_test_lsmd_start "${LSM_TEST_WITHOUT_MEM_CHECK}"
 
     # This will test python2 everything
     lsm_test_plugin_test_run "${uri}"  "${pw}"
