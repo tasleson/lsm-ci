@@ -8,6 +8,9 @@ Some interesting pieces of functionality that others may want to leverage (see a
 **Setting a status on a commit using the python 'requests' library**
 ```python
 def _create_status(repo, sha1, state, desc, context, log_url=None):
+    """
+    Reports status back to github.
+    """
     if '/' not in repo:
         raise Exception("Expecting repo to be in form user/repo %s" % repo)
 
@@ -26,8 +29,10 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
 ```
 **Verifying a sha1 payload signature**
 ```python
-# Verify the payload using our shared secret with github
 def _verify_signature(payload_body, header_signature):
+    """
+    Verify the payload using our shared secret with github
+    """
     h = hmac.new(GIT_SECRET, payload_body, hashlib.sha1)
     signature = 'sha1=' + h.hexdigest()
     try:
@@ -39,10 +44,11 @@ def _verify_signature(payload_body, header_signature):
 
 **Handling the event from github (using python bottle)**
 ```python
-# The callback for the handler registered with github
 @route('/event_handler', method='POST')
 def e_handler():
-
+    """
+    The callback for the handler registered with github
+    """
     # Check secret before we do anything
     if not _verify_signature(request.body.read(),
                              request.headers['X-Hub-Signature']):
