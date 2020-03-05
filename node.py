@@ -372,7 +372,7 @@ class Cmds(object):
             # Before we move, lets store off the perms, so we can restore them
             # after the move
             if os.path.exists(dest_path_name):
-                perms = (os.stat(dest_path_name).st_mode & 0777)
+                perms = (os.stat(dest_path_name).st_mode & 0o777)
 
             testlib.p('Moving: %s -> %s' % (src_path_name, dest_path_name))
             shutil.move(src_path_name, dest_path_name)
