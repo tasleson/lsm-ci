@@ -62,7 +62,7 @@ TRUSTED_REPO_REMOTE = os.getenv(
     'libstorage/libstoragemgmt/master/test/trusted.yaml')
 
 # File name for log file which is retrievable by client
-f_name = re.compile('[a-z]{32}\.html')
+f_name = re.compile('[a-z]{32}.html')
 
 # We are storing a history of work, so that we can go back and re-run as needed
 work_log = deque(maxlen=20)
