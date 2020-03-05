@@ -1,27 +1,25 @@
 #!/usr/bin/env python2
-#
-# Theory of operation
-# 1. Read the config file getting
-#    - Server and port to connect too
-#    - What arrays are available to use
-# 2. Connect to the server
-# 3. Wait for a command request
-# 4. If server connection goes away or haven't received ping, close connection
-#    and try to periodically re-establish communication
-#
-# Command requests include:
-# ping - check to see if the connection is working
-# arrays - Return array information on what is available to test
-# running - Return which arrays are currently running tests
-# job_create - Submit a new test to run (Creates a new process)
-# jobs - Return job state information on all submitted jobs
-# job - Return job state information about a specific job
-# job_delete - Delete the specific job request freeing resources
-# job_completion - Retrieve the exit code and log for specified job
-#
-# Service which runs a test(s) on the same box as service
-#
-#  See: https://github.com/tasleson/lsm-ci/blob/master/LICENSE
+"""
+Theory of operation
+1. Read the config file getting
+   - Server and port to connect too
+   - What arrays are available to use
+2. Connect to the server
+3. Wait for a command request
+4. If server connection goes away or haven't received ping, close connection
+   and try to periodically re-establish communication
+Command requests include:
+ping - check to see if the connection is working
+arrays - Return array information on what is available to test
+running - Return which arrays are currently running tests
+job_create - Submit a new test to run (Creates a new process)
+jobs - Return job state information on all submitted jobs
+job - Return job state information about a specific job
+job_delete - Delete the specific job request freeing resources
+job_completion - Retrieve the exit code and log for specified job
+Service which runs a test(s) on the same box as service
+ See: https://github.com/tasleson/lsm-ci/blob/master/LICENSE
+"""
 
 import string
 import random
@@ -170,37 +168,55 @@ def _only_running():
 
 
 class Cmds(object):
+    """
+    Class that handles the rest methods.
+    """
 
     @staticmethod
     def ping():
+        """
+        Used to see if the node manager can talk to the node.
+        :return: string pong and http code 200
+        """
         return "pong", 200, ""
 
     # Returns systems available for running tests
     @staticmethod
     def arrays():
+        """
+        Returns  which arrays are available.
+        :return: array of tuples which gets converted into JSON and http 200
+            status code.
+        """
         rc = [(x['ID'], x['PLUGIN']) for x in config['ARRAYS']]
         return rc, 200, ""
 
-    # Returns all tests that are still running
-    # returns array of dictionary
-    # [ {"STATUS": ['RUNNING'|'SUCCESS'|'FAIL'}, "ID": <array id>,
-    # "JOB_ID": [a-z]{32}, "PLUGIN":'lsm plugin'}, ... ]
     @staticmethod
     def running():
+        """
+        Returns dictionary which gets converted to JSON tests that
+        are still running.
+        :return: array of dictionary
+            [ {"STATUS": ['RUNNING'|'SUCCESS'|'FAIL'}, "ID": <array id>,
+            "JOB_ID": [a-z]{32}, "PLUGIN":'lsm plugin'}, ... ]
+        """
         rc = _only_running()
 
         return rc, 200, ""
 
-    # Submit a new test to run
-    # @param repo       The git repo to use
-    # @param branch     The git branch
-    # @param array_id   The test array ID
-    # @returns http status code
-    # 412 - Job already running on specified array
-    # 400 - Input parameters are incorrect or missing
-    # 201 - Test started
     @staticmethod
     def job_create(repo, branch, array_id):
+        """
+        Submit a new test to run
+
+        :param repo: The git repo to use
+        :param branch: The git branch
+        :param array_id: The test array ID
+        :return:
+            412 - Job already running on specified array
+            400 - Input parameters are incorrect or missing
+            201 - Test started
+        """
         global jobs
 
         testlib.p("Running test for %s %s %s" % (repo, branch, array_id))
@@ -245,32 +261,41 @@ class Cmds(object):
         else:
             return "", 400, "Invalid array specified!"
 
-    # Returns all known jobs regardless of status
-    # returns array of dictionaries
     @staticmethod
     def jobs():
+        """
+        Returns all known jobs regardless of status
+        :return: array of dictionaries
+        """
         rc = []
         for k in jobs.keys():
             rc.append(_return_state(k))
 
         return rc, 200, ""
 
-    # Get the status of the specified job
     @staticmethod
     def job(job_id):
+        """
+        Get the status of the specified job
+        :param job_id: ID of job to get status on
+        :return: job state
+        """
         global jobs
         if job_id in jobs:
             return _return_state(job_id), 200, ""
         return "", 404, "Job not found!"
 
-    # Get the exit code and log file for the specified job
-    # @returns http status:
-    # 200 on success
-    # 400 if job is still running
-    # 404 if job is not found
-    # json payload { "EC": <exit code>, "OUTPUT": "std out + std error"}
     @staticmethod
     def job_completion(job_id):
+        """
+        Get the exit code and log file for the specified job
+        :param job_id: ID of job
+        :return: http status:
+            200 on success
+            400 if job is still running
+            404 if job is not found
+            json payload { "EC": <exit code>, "OUTPUT": "std out + std error"}
+        """
         if job_id in jobs:
             j = jobs[job_id]
             log = _file_name(job_id)
@@ -296,12 +321,15 @@ class Cmds(object):
         else:
             return "", 404, "Job not found"
 
-    # Delete a test that is no longer running, cleans up in memory hash and
-    # removes log file from disk
-    # @returns http status 200 on success, else 400 if job is still running
-    # or 404 if job is not found
     @staticmethod
     def job_delete(job_id):
+        """
+        Delete a test that is no longer running, cleans up in memory hash and
+        removes log file from disk
+        :param job_id: ID of job
+        :return: http status 200 on success, else 400 if job is still running
+                 or 404 if job is not found
+        """
         global jobs
         if job_id in jobs:
             j = jobs[job_id]
@@ -315,12 +343,15 @@ class Cmds(object):
         else:
             return "", 404, "Job not found"
 
-    # Return the md5 for a list of files, the file cannot contain any '/' and
-    # we are restricting it to the same directory as the node.py executing
-    # directory as we are only expecting to check files in the same directory.
-    # Returns an array of md5sums in the order the files were given to us.
     @staticmethod
     def md5_files(files):
+        """
+        Return the md5 for a list of files, the file cannot contain any '/' and
+        we are restricting it to the same directory as the node.py executing
+        directory as we are only expecting to check files in the same directory.
+        :param files: List of files
+        :return: An array of md5sums in the order the files were given to us.
+        """
         rc = []
 
         for file_name in files:
@@ -383,11 +414,18 @@ class Cmds(object):
 
         return "", 200, ""
 
-    # Given a file_name, the file_contents and the md5sum for the file we will
-    # dump the file contents to a tmp file, validate the md5 and if all is well
-    # we will replace the file_name with it.
     @staticmethod
     def update_files(file_data):
+        """
+        Given a file_name, the file_contents and the md5sum for the file we will
+        dump the file contents to a tmp file, validate the md5 and if all is
+        well we will replace the file_name with it.
+
+        Note: file data is a hash with keys: 'fn', 'data', 'md5'
+
+        :param file_data:
+        :return: http 200 on success, else 412
+        """
         # Create a temp directory
         td = tempfile.mkdtemp()
 
@@ -405,6 +443,10 @@ class Cmds(object):
 
     @staticmethod
     def restart():
+        """
+        Restart the node
+        :return: None
+        """
         global NODE
         testlib.p('Restarting node as requested by node_manager')
         os.chdir(STARTUP_CWD)
@@ -413,6 +455,11 @@ class Cmds(object):
 
 
 def process_request(req):
+    """
+    Processes the request.
+    :param req: The request
+    :return: Appropriate http status code.
+    """
     data = ""
     ec = 0
     error_msg = ""

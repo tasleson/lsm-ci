@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-#
-# Service for github CI to talk too
-#
-#  See: https://github.com/tasleson/lsm-ci/blob/master/LICENSE
+"""
+Service for github CI to talk too.  It also coordinates communication with all
+the other nodes.
 
+See: https://github.com/tasleson/lsm-ci/blob/master/LICENSE
+"""
 import pprint
 import requests
 from bottle import route, run, request, template
@@ -235,6 +236,11 @@ def _run_tests(info):
 
 @route('/log/<log_file>')
 def fetch(log_file):
+    """
+    Method which takes a given log file and reads it up to return.
+    :param log_file: Log file to fetch
+    :return: Data surrounded with <pre></pre> tags
+    """
     d = _log_read(log_file)
     if len(d) == 0:
         d = "Nothing to see here..."
@@ -295,6 +301,11 @@ def _p(msg):
 # Github calls this when we get a pull request
 @route('/event_handler', method='POST')
 def e_handler():
+    """
+    This is the handler that gets called when github has a new PR for us to
+    do something upon.
+    :return: http status code 200 on success, else 500.
+    """
     global processes
 
     # Check secret before we do anything

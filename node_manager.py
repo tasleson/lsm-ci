@@ -1,9 +1,8 @@
-#!/usr/bin/env python2
-#
-# Service for github CI to talk too
-#
-#  See: https://github.com/tasleson/lsm-ci/blob/master/LICENSE
-
+#!/usr/bin/python3
+"""
+Service for github CI to talk too
+See: https://github.com/tasleson/lsm-ci/blob/master/LICENSE
+"""
 import pprint
 import requests
 from bottle import route, run, request, template
@@ -150,8 +149,14 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
 
 
 def trusted_repo(info):
-    # We are opening the file each time, so we can update it without restarting
+    """
+    Determine if we true a repo.
+
+    We are opening the file each time, so we can update it without restarting
     # the service.
+    :param info:  Information about what is to be tested
+    :return: True/False
+    """
 
     trusted = {}
 
@@ -187,6 +192,12 @@ def trusted_repo(info):
 
 
 def run_tests(info):
+    """
+    Run the tests.
+    :param info: Information about what is to be tested
+    :return: None
+    """
+
     # As nodes can potentially come/go with errors we will get a list of what
     # we started with and will try to utilize them and only them for the
     # duration of the test
@@ -298,6 +309,10 @@ def _verify_signature(payload_body, header_signature):
 
 # Thread that runs taking work off of the request queue and processing it
 def request_queue():
+    """
+    Loops processing items on the request queue.
+    :return: None
+    """
     global processing
     global processing_mutex
 
@@ -325,6 +340,10 @@ def request_queue():
 
 @route('/completed')
 def completed_requests():
+    """
+    Handles the request for what has been completed.
+    :return: JSON
+    """
     rc = []
     c_r = reversed(list(work_log))
 
@@ -338,6 +357,10 @@ def completed_requests():
 
 @route('/processing')
 def completed_requests():
+    """
+    Handles the request for what is in processing.
+    :return: JSON
+    """
     global processing
     global processing_mutex
     rc = []
@@ -353,6 +376,11 @@ def completed_requests():
 
 @route('/rerun/<test_id>')
 def rerun_test(test_id):
+    """
+    Re-runs a test
+    :param test_id:  Test id to re-run.
+    :return: Appropriate http status code
+    """
     global test_count
 
     tmp_id = 0
@@ -391,6 +419,11 @@ def rerun_test(test_id):
 # Note: Don't leak too much information
 @route('/nodes')
 def nodes():
+    """
+    Returns connected clients.
+    :return: JSON list of connected clients.
+    """
+
     rc = []
 
     for n in node_mgr.nodes():
@@ -402,12 +435,20 @@ def nodes():
 
 @route('/stats')
 def stats():
+    """
+    Returns information on current request queue size.
+    :return: JSON representation of queue size, eg. {"QUEUE_SIZE": 0}
+    """
     response.content_type = 'application/json'
     return json.dumps(dict(QUEUE_SIZE=req_q.qsize()))
 
 
 @route('/queue')
 def queue():
+    """
+    Returns what's in the queue
+    :return: Items in request Q as JSON.
+    """
     rc = []
     response.content_type = 'application/json'
 
@@ -418,10 +459,14 @@ def queue():
     return json.dumps(rc)
 
 
-# A URL is given back to github on error, clients web browsers will call this
-# link to get the log file
 @route('/log/<log_file>')
 def fetch(log_file):
+    """
+    A URL is given back to github on error, clients web browsers will call this
+    link to get the log file.
+    :param log_file: Log file to retrieve.
+    :return:
+    """
     d = _log_read(log_file)
 
     if d:
@@ -434,9 +479,12 @@ def fetch(log_file):
     return
 
 
-# Github calls this when we get a pull request
 @route('/event_handler', method='POST')
 def e_handler():
+    """
+    Github calls this when we get a pull request
+    :return: Http status code, 500 on error, else 200.
+    """
     global test_count
 
     # Check secret before we do *anything*

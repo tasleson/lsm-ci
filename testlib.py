@@ -1,3 +1,6 @@
+"""
+Shared code which is used in node_manager and node.
+"""
 #  See: https://github.com/tasleson/lsm-ci/blob/master/LICENSE
 
 import json
@@ -33,15 +36,30 @@ def _file_data(file_name):
 
 
 def file_md5(file_name):
+    """
+    Given a file name return md5 signature
+    :param file_name: The name of the file
+    :return: md5 signature.
+    """
     return md5(_file_data(file_name))
 
 
 def file_md5_and_data(file_name):
+    """
+    Returns the md5 and contents of file data.
+    :param file_name: File name to open
+    :return: (md5 file data, data)
+    """
     fd = _file_data(file_name)
     return md5(fd), fd
 
 
 def md5(t):
+    """
+    Calculate the md5 of data t
+    :param t: Data to generate md5 for
+    :return: md5 hex digest
+    """
     h = hashlib.md5()
     h.update(t.encode("utf-8"))
     h.update(hs.encode('utf-8'))
@@ -49,12 +67,19 @@ def md5(t):
 
 
 class Request(object):
+    """
+    Request class.
+    """
 
     def __init__(self, method, args=None):
         self.method = method
         self.args = args
 
     def serialize(self):
+        """
+        Method to serialize the request.
+        :return: JSON
+        """
         return json.dumps(dict(method=self.method, args=self.args))
 
     def __str__(self):
@@ -62,6 +87,9 @@ class Request(object):
 
 
 class Response(object):
+    """
+    Response class
+    """
 
     def __init__(self, result, ec, err_msg):
         self.result = result
@@ -69,6 +97,10 @@ class Response(object):
         self.err_msg = err_msg
 
     def serialize(self):
+        """
+        Method to serialize the response.
+        :return: JSON
+        """
         return json.dumps(dict(ec=self.ec, err_msg=self.err_msg,
                                result=self.result))
 
@@ -77,6 +109,11 @@ class Response(object):
 
 
 def deserialize(json_str):
+    """
+    Given a JSON string, convert to Request or Response
+    :param json_str: JSON to deserialize
+    :return: Request or Response object
+    """
     package = json.loads(json_str)
 
     if 'method' in package:
@@ -86,6 +123,9 @@ def deserialize(json_str):
 
 
 class Transport(object):
+    """
+    Handles the messages on the byte stream.
+    """
 
     HDR_LEN = 10 + 32
 
@@ -107,9 +147,10 @@ class Transport(object):
         return data.decode("utf-8")
 
     def read_msg(self):
-        # Read the header, then the payload, validate the payload, parse and
-        # return the Request or response
-
+        """
+        Read the header, then the payload, validate the payload, parse
+        :return: The Request or Response.
+        """
         hdr = self._read_all(self.HDR_LEN)
         payload_len, signature = int(hdr[:10]), hdr[10:]
 
@@ -124,6 +165,12 @@ class Transport(object):
         return deserialize(payload)
 
     def write_msg(self, msg):
+        """
+        Write the message out on the wire.
+        :param msg: The request or response to serialize.
+        :return: None
+        """
+
         # Message will have the following format
         # 10 digit payload length
         # 32 character payload md5
@@ -139,6 +186,11 @@ class Transport(object):
 
 
 def p(msg):
+    """
+    Thread safe print which includes the thread ID in message.
+    :param msg: Message to be printed
+    :return: None
+    """
     with print_lock:
         tid = ctypes.CDLL('libc.so.6').syscall(224)
         ts = datetime.datetime.fromtimestamp(
@@ -157,6 +209,9 @@ def _try_close(s):
 
 
 class TestNode(object):
+    """
+    Class that handles the test node functionality.
+    """
 
     def __init__(self, server_ip, port=PORT, use_proxy=False, proxy_is_ip=True,
                  proxy_host=None, proxy_port=None):
@@ -172,6 +227,10 @@ class TestNode(object):
         self.t = None
 
     def connect(self):
+        """
+        Connect to the node manager.
+        :return: boolean
+        """
 
         try:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -215,12 +274,25 @@ class TestNode(object):
         return True
 
     def wait_for_request(self):
+        """
+        Blocks waiting for a request.
+        :return: Request
+        """
         return self.t.read_msg()
 
     def return_response(self, resp):
+        """
+        Returns a response.
+        :param resp: Response to return
+        :return: None
+        """
         self.t.write_msg(resp)
 
     def disconnect(self):
+        """
+        Disconnect from node manager.
+        :return: None
+        """
         # noinspection PyBroadException
         _try_close(self.s)
         self.s = None
@@ -228,6 +300,9 @@ class TestNode(object):
 
 
 class Node(object):
+    """
+    Represents a client for the node manager.
+    """
 
     READY = 1
     UNUSABLE = 2
@@ -255,10 +330,19 @@ class Node(object):
 
     @property
     def state(self):
+        """
+        State of the node
+        :return: Node.READY, NODE.UNUSABLE
+        """
         return self._state
 
     @state.setter
     def state(self, value):
+        """
+        Sets the state of the node
+        :param value: New state
+        :return: None
+        """
         if self._state != value:
             if value == Node.UNUSABLE:
                 p('Node %s:%d now unavailable!' %
@@ -266,12 +350,20 @@ class Node(object):
         self._state = value
 
     def close(self):
+        """
+        Close the connection to the node.
+        :return: None
+        """
         with self.lock:
             # noinspection PyBroadException
             _try_close(self.s)
             self.state = Node.UNUSABLE
 
     def verify(self):
+        """
+        Verifies the node by pinging it.
+        :return: Boolean
+        """
         rc = False
         with self.lock:
             if self.state == Node.READY:
@@ -283,6 +375,11 @@ class Node(object):
         return rc
 
     def replace(self, other):
+        """
+        Replaces a connection with a node with this one.
+        :param other: One to use as replacement.
+        :return: None
+        """
         with self.lock:
             with other.lock:
                 # Close this connection
@@ -294,6 +391,10 @@ class Node(object):
                 self.client_port = other.client_port
 
     def arrays(self):
+        """
+        Finds out what arrays are on a node.
+        :return: Array of information about storage arrays
+        """
         with self.lock:
             resp = self._rpc('arrays')
             if resp and resp.ec == 200:
@@ -303,6 +404,15 @@ class Node(object):
             return []
 
     def arrays_running(self):
+        """
+        Finds out status of running tests.
+        :return: An array of dicts
+
+        [{"STATUS": "RUNNING",
+          "ID": "simulator",
+          "JOB_ID": "czthgpztdcvcvqjrgcdcwerppctodtdc",
+          "PLUGIN": "sim"}]
+        """
         with self.lock:
             resp = self._rpc('running')
             if resp and resp.ec == 200:
@@ -318,6 +428,10 @@ class Node(object):
             return []
 
     def jobs(self):
+        """
+        Call the jobs method on node
+        :return: Array
+        """
         with self.lock:
             resp = self._rpc('jobs')
             if resp and resp.ec == 200:
@@ -325,6 +439,11 @@ class Node(object):
             return []
 
     def job_completion(self, job_id):
+        """
+        Get the result of the job id.
+        :param job_id: ID of job
+        :return: Result output
+        """
         with self.lock:
             resp = self._rpc('job_completion', (job_id,))
             if resp and resp.ec == 200:
@@ -333,6 +452,11 @@ class Node(object):
             return None
 
     def job_delete(self, job_id):
+        """
+        Delete the job and associated data from node.
+        :param job_id: ID of job
+        :return: None
+        """
         with self.lock:
             resp = self._rpc('job_delete', (job_id,))
             if resp and resp.ec != 200:
@@ -342,6 +466,13 @@ class Node(object):
                 p("Job %s deleted!" % job_id)
 
     def start_test(self, clone_url, branch, array_id):
+        """
+        Starts the test on the node.
+        :param clone_url: github repo url
+        :param branch: branch
+        :param array_id: Array id to test
+        :return: Job id or None
+        """
         with self.lock:
             resp = self._rpc('job_create', (clone_url, branch, array_id))
             if resp and resp.ec == 201:
@@ -351,6 +482,11 @@ class Node(object):
             return None
 
     def get_file_md5(self, file_list):
+        """
+        Get an array of file signatures
+        :param file_list:
+        :return: Array of file signatures.
+        """
         with self.lock:
             resp = self._rpc('md5_files', (file_list, ))
             if resp and resp.ec == 200:
@@ -360,8 +496,12 @@ class Node(object):
             return None
 
     def update_files(self, file_list):
-        # For each file in the file list, load it into memory, md5 it and
-        # send it to the client!
+        """
+        For each file in the file list, load it into memory, md5 it and
+        send it to the client!
+        :param file_list: List of files.
+        :return: Boolean
+        """
         pushed_files = []
 
         for f in file_list:
@@ -377,6 +517,10 @@ class Node(object):
         return False
 
     def restart(self):
+        """
+        Restart the node!
+        :return: None
+        """
         # The node doesn't respond with a msg on a restart!
         self._rpc('restart')
 
@@ -401,11 +545,19 @@ class NodeManager(object):
         self.known_clients = {}
 
     def start(self):
+        """
+        Called to start the thread for main event loop.
+        :return:
+        """
         thread = threading.Thread(target=NodeManager.main_event_loop,
                                   name="Node Manager", args=(self,))
         thread.start()
 
     def nodes(self):
+        """
+        Find which nodes are responsive.
+        :return: List of responsive nodes.
+        """
         rc = []
         with self.lock:
             for i in self.known_clients.values():
@@ -430,6 +582,12 @@ class NodeManager(object):
 
     @staticmethod
     def main_event_loop(node_mgr):
+        """
+        Main event loop for node manager.
+        :param node_mgr: Node manager object
+        :return: None
+        """
+
         # Setup the listening socket
         bindsocket = None
         try:
@@ -525,9 +683,13 @@ class NodeManager(object):
 
     @staticmethod
     def check_for_updates(node):
-        # Get the current signatures of the files we have and compare it to
-        # the ones on the node, if they don't match push them down and restart
-        # the client
+        """
+        Get the current signatures of the files we have and compare it to
+        the ones on the node, if they don't match push them down and restart
+        the client
+        :param node: Client node of interest
+        :return: None.
+        """
         p('Checking for updates')
         local_signatures = []
 
