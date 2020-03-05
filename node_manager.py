@@ -16,7 +16,13 @@ import hashlib
 import sys
 import datetime
 import testlib
-import Queue
+try:
+    # noinspection PyUnresolvedReferences,PyCompatibility
+    import Queue
+except ModuleNotFoundError:
+    # noinspection PyUnresolvedReferences,PyCompatibility,PyPep8Naming
+    import queue as Queue
+
 import traceback
 from testlib import p as _p
 import re
