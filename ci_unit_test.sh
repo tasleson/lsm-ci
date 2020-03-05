@@ -42,7 +42,7 @@ function good
 {
 	# test_include.sh has this function, but we need to run a number of
 	# commands before we can fetch the source to utilize it
-	echo "executing: $@"
+	echo "executing: $*"
     eval "$@"
     local ec=$?
     if [ ${ec} -ne 0 ]; then
