@@ -333,7 +333,7 @@ def request_queue():
             pass
         except Exception:
             st = traceback.format_exc()
-            _p("request_queue: unexpected exception: %s" % (st))
+            _p("request_queue: unexpected exception: %s" % st)
 
     _p('Exiting request_queue')
 
