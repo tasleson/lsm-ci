@@ -103,7 +103,7 @@ def _log_write(node, job_id):
         data = "Unable to retrieve log, node not unavailable or hitting a bug!"
 
     with open(ERROR_LOG_DIR + '/' + job_id + '.html', 'w') as log_file:
-        log_file.write(data.encode('utf-8'))
+        log_file.write(data)
 
 
 def _log_read(fn):
