@@ -175,7 +175,6 @@ class Transport(object):
         # 10 digit payload length
         # 32 character payload md5
         # payload
-
         serialized_msg = msg.serialize()
         digest = md5(serialized_msg)
 
