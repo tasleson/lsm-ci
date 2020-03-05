@@ -124,9 +124,10 @@ def _log_read(fn):
 
     out = ""
 
-    for l in data:
-        if 'password' not in l and 'Password' not in l:
-            out += l
+    # Make sure we don't expose plain word password in the log files.
+    for line in data:
+        if 'password' not in line and 'Password' not in line:
+            out += line
         else:
             out += "**** Line omitted as it contains a password ****\n"
     return out
