@@ -431,6 +431,7 @@ class NodeManager(object):
     @staticmethod
     def main_event_loop(node_mgr):
         # Setup the listening socket
+        bindsocket = None
         try:
             bindsocket = NodeManager._setup_listening(node_mgr.ip,
                                                       node_mgr.port)
