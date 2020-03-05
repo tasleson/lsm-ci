@@ -68,8 +68,8 @@ def _run_command(job_id, args):
     sys.exit(ec)
 
 
-def _rs(l):
-    return ''.join(random.choice(string.ascii_lowercase) for _ in range(l))
+def _rs(length):
+    return ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
 
 
 def _load_config():
