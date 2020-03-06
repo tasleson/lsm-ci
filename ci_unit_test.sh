@@ -66,7 +66,7 @@ function run_test
 
     lsm_test_lsmd_start "${LSM_TEST_WITHOUT_MEM_CHECK}"
 
-    # This will test python2 everything
+    # This will test everything
     lsm_test_plugin_test_run "${uri}"  "${pw}"
 
     lsm_test_cleanup
@@ -95,21 +95,8 @@ fi
 
 good cd "${src_dir}"
 
-# Do basic py2 test
+# Do basic test.
 run_test ""
 
-# Lets see if python3 is available in configure
-./configure --help | grep "python3"
-rc=$?
-if [ ${rc} -eq 0 ]; then
-    echo "Re-running plugin test with python3 interpreter"
-
-    # Start at a consistent state
-    good git clean -fxd
-
-    run_test --with-python3
-else
-    echo "No python3 support found skipping..."
-fi
-
 exit 0
+
