@@ -18,7 +18,6 @@ import multiprocessing
 import ctypes
 import signal
 
-
 # What port the clients will try to connect to
 PORT = int(os.getenv("LSM_CI_CLIENT_PORT", 443))
 
@@ -101,8 +100,8 @@ class Response(object):
         Method to serialize the response.
         :return: JSON
         """
-        return json.dumps(dict(ec=self.ec, err_msg=self.err_msg,
-                               result=self.result))
+        return json.dumps(
+            dict(ec=self.ec, err_msg=self.err_msg, result=self.result))
 
     def __str__(self):
         return self.serialize()
@@ -212,8 +211,13 @@ class TestNode(object):
     Class that handles the test node functionality.
     """
 
-    def __init__(self, server_ip, port=PORT, use_proxy=False, proxy_is_ip=True,
-                 proxy_host=None, proxy_port=None):
+    def __init__(self,
+                 server_ip,
+                 port=PORT,
+                 use_proxy=False,
+                 proxy_is_ip=True,
+                 proxy_host=None,
+                 proxy_port=None):
         self.server_ip = server_ip
         self.port = port
         self.use_proxy = use_proxy
@@ -251,12 +255,12 @@ class TestNode(object):
                 if status != str(200):
                     raise IOError("Connection to proxy failed")
 
-            self.s = ssl.wrap_socket(self.s,
-                                     ca_certs="server_cert.pem",
-                                     cert_reqs=ssl.CERT_REQUIRED,
-                                     certfile="client_cert.pem",
-                                     keyfile="client_key.pem"
-                                     )
+            self.s = ssl.wrap_socket(
+                self.s,
+                ca_certs="server_cert.pem",
+                cert_reqs=ssl.CERT_REQUIRED,
+                certfile="client_cert.pem",
+                keyfile="client_key.pem")
 
             if self.use_proxy:
                 self.s.do_handshake()
@@ -344,8 +348,8 @@ class Node(object):
         """
         if self._state != value:
             if value == Node.UNUSABLE:
-                p('Node %s:%d now unavailable!' %
-                  (self.client_ip, self.client_port))
+                p('Node %s:%d now unavailable!' % (self.client_ip,
+                                                   self.client_port))
         self._state = value
 
     def close(self):
@@ -444,7 +448,7 @@ class Node(object):
         :return: Result output
         """
         with self.lock:
-            resp = self._rpc('job_completion', (job_id,))
+            resp = self._rpc('job_completion', (job_id, ))
             if resp and resp.ec == 200:
                 output = json.loads(resp.result)['OUTPUT']
                 return output
@@ -457,10 +461,10 @@ class Node(object):
         :return: None
         """
         with self.lock:
-            resp = self._rpc('job_delete', (job_id,))
+            resp = self._rpc('job_delete', (job_id, ))
             if resp and resp.ec != 200:
                 p("Error: Unable to delete job id = %s resp = %s" %
-                    (job_id, str(resp)))
+                  (job_id, str(resp)))
             else:
                 p("Job %s deleted!" % job_id)
 
@@ -548,8 +552,10 @@ class NodeManager(object):
         Called to start the thread for main event loop.
         :return:
         """
-        thread = threading.Thread(target=NodeManager.main_event_loop,
-                                  name="Node Manager", args=(self,))
+        thread = threading.Thread(
+            target=NodeManager.main_event_loop,
+            name="Node Manager",
+            args=(self, ))
         thread.start()
 
     def nodes(self):
@@ -626,7 +632,6 @@ class NodeManager(object):
                             server_side=True,
                             certfile="server_cert.pem",
                             keyfile="server_key.pem",
-
                             ca_certs="client_cert.pem",
                             cert_reqs=ssl.CERT_REQUIRED)
 
@@ -671,8 +676,8 @@ class NodeManager(object):
                 # We get these errors when someone port scan and tries to
                 # connect
                 _try_close(new_socket)
-                p("SSL error: Rejecting %s for %s" %
-                    (str(from_addr), str(ssle)))
+                p("SSL error: Rejecting %s for %s" % (str(from_addr),
+                                                      str(ssle)))
             except:
                 p(str(traceback.format_exc()))
                 _try_close(connection)
@@ -704,7 +709,7 @@ class NodeManager(object):
                 for i, fn in enumerate(files):
                     if local_signatures[i] != remote_signatures[i]:
                         p('File %s local= %s remote= %s' %
-                            (fn, local_signatures[i], remote_signatures[i]))
+                          (fn, local_signatures[i], remote_signatures[i]))
 
                 if node.update_files(files):
                     remote_signatures = node.get_file_md5(files)

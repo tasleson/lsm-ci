@@ -30,7 +30,6 @@ import json
 import copy
 import yaml
 
-
 pp = pprint.PrettyPrinter(depth=4)
 
 # What Host/IP & port to serve on
@@ -57,8 +56,7 @@ TRUSTED_REPO_FN = os.getenv('TRUSTED_REPOS', '')
 
 # Full path to trusted file on repo itself
 TRUSTED_REPO_REMOTE = os.getenv(
-    'TRUSTED_REPOS_REMOTE',
-    'https://raw.githubusercontent.com/' +
+    'TRUSTED_REPOS_REMOTE', 'https://raw.githubusercontent.com/' +
     'libstorage/libstoragemgmt/master/test/trusted.yaml')
 
 # When we test locally we don't want to try and set status on github.
@@ -69,7 +67,6 @@ f_name = re.compile('[a-z]{32}.html')
 
 # We are storing a history of work, so that we can go back and re-run as needed
 work_log = deque(maxlen=20)
-
 
 node_mgr = testlib.NodeManager(HOST)
 req_q = Queue.Queue()
@@ -86,16 +83,15 @@ def _post_with_retries(url, data, auth):
             r = requests.post(url, auth=auth, json=data)
             return r
         except requests.ConnectionError as ce:
-            _p("ConnectionError to (post) %s : message(%s)" %
-                      (url, str(ce)))
+            _p("ConnectionError to (post) %s : message(%s)" % (url, str(ce)))
             _p("Trying again in 1 second")
             time.sleep(1)
 
 
 def _print_error(req, msg):
     formatted_json = pp.pformat(req.json())
-    _p("%s status code = %d, \nJSON: \n%s\n" %
-        (msg, req.status_code, formatted_json))
+    _p("%s status code = %d, \nJSON: \n%s\n" % (msg, req.status_code,
+                                                formatted_json))
 
 
 def _log_write(node, job_id):
@@ -148,8 +144,9 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
         if r.status_code == 201:
             _p('We updated status url=%s data=%s' % (str(url), str(data)))
         else:
-            _print_error(r, "Unexpected error on setting status url=%s data=%s "
-                         % (str(url), str(data)))
+            _print_error(r,
+                         "Unexpected error on setting status url=%s data=%s " %
+                         (str(url), str(data)))
     else:
         _p('NOT POSTED: updated status url=%s data=%s' % (str(url), str(data)))
 
@@ -182,17 +179,14 @@ def trusted_repo(info):
 
         if info['clone'] in trusted['REPOS']:
             _create_status(info["repo"], info['sha'], 'success',
-                           'Repo trusted',
-                           'CI permissions')
+                           'Repo trusted', 'CI permissions')
             return True
         else:
             _create_status(info["repo"], info['sha'], 'failure',
-                           'Repo untrusted',
-                           'CI permissions')
+                           'Repo untrusted', 'CI permissions')
     except Exception as e:
         _p('Unable to retrieve trusted repo list! %s' % str(e))
-        _create_status(info["repo"], info['sha'], 'failure',
-                       'WL unavailable!',
+        _create_status(info["repo"], info['sha'], 'failure', 'WL unavailable!',
                        'CI permissions')
     return False
 
@@ -225,8 +219,7 @@ def run_tests(info):
             _create_status(info["repo"], info['sha'], "pending",
                            'Plugin = %s started @ %s' %
                            (a[1], datetime.datetime.fromtimestamp(
-                               time.time()).strftime('%m/%d %H:%M:%S')),
-                           a[0])
+                               time.time()).strftime('%m/%d %H:%M:%S')), a[0])
 
     _p('Starting the tests')
 
@@ -406,8 +399,9 @@ def rerun_test(test_id):
             # Try to make the test counts unique
             cpy = copy.deepcopy(i)
 
-            _p('Re-running test: client IP %s: %s %s' %
-                (request.remote_addr, str(test_id), str(cpy)))
+            _p('Re-running test: client IP %s: %s %s' % (request.remote_addr,
+                                                         str(test_id),
+                                                         str(cpy)))
 
             cpy['test_run_id'] = test_count
             test_count += 1
@@ -507,8 +501,12 @@ def e_handler():
 
         _p('Queuing unit tests for %s %s' % (clone, branch))
 
-        info = dict(repo=repo, sha=sha, branch=branch, clone=clone,
-                       test_run_id=test_count)
+        info = dict(
+            repo=repo,
+            sha=sha,
+            branch=branch,
+            clone=clone,
+            test_run_id=test_count)
 
         # Lets immediately set something on the PR so that people looking at
         # the PR see that the service is aware of it.

@@ -35,7 +35,6 @@ import traceback
 import tempfile
 import shutil
 
-
 jobs = {}
 config = {}
 
@@ -93,7 +92,8 @@ def _run_command(job_id, args):
 
 
 def _rs(length):
-    return ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
+    return ''.join(
+        random.choice(string.ascii_lowercase) for _ in range(length))
 
 
 def _load_config():
@@ -113,9 +113,8 @@ def _load_config():
         testlib.p("config PROGRAM %s does not exist" % config['PROGRAM'])
         sys.exit(1)
 
-    if not (os.path.exists(config['LOGDIR']) and
-            os.path.isdir(config['LOGDIR']) and
-            os.access(config['LOGDIR'], os.W_OK)):
+    if not (os.path.exists(config['LOGDIR']) and os.path.isdir(
+            config['LOGDIR']) and os.access(config['LOGDIR'], os.W_OK)):
         testlib.p("config LOGDIR not preset or not a "
                   "directory %s or not writeable" % (config['LOGDIR']))
         sys.exit(1)
@@ -150,8 +149,12 @@ def _return_state(job_id, only_running=False):
     job = jobs[job_id]
 
     if not only_running or (only_running and job["STATUS"] == 'RUNNING'):
-        return {"STATUS": job["STATUS"], "ID": job['ID'],
-                "JOB_ID": job_id, "PLUGIN": job['PLUGIN']}
+        return {
+            "STATUS": job["STATUS"],
+            "ID": job['ID'],
+            "JOB_ID": job_id,
+            "PLUGIN": job['PLUGIN']
+        }
     return None
 
 
@@ -253,10 +256,8 @@ class Cmds(object):
             p.name = "|".join(incoming)
             p.start()
 
-            jobs[job_id] = dict(STATUS='RUNNING',
-                                PROCESS=p,
-                                ID=array_id,
-                                PLUGIN=plug)
+            jobs[job_id] = dict(
+                STATUS='RUNNING', PROCESS=p, ID=array_id, PLUGIN=plug)
             return job_id, 201, ""
         else:
             return "", 400, "Invalid array specified!"
@@ -358,8 +359,8 @@ class Cmds(object):
             if '/' in file_name:
                 return rc, 412, 'File %s contains illegal character' % file_name
 
-            full_fn = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                   file_name)
+            full_fn = os.path.join(
+                os.path.dirname(os.path.realpath(__file__)), file_name)
             if os.path.exists(full_fn) and os.path.isfile(full_fn):
                 rc.append(testlib.file_md5(full_fn))
             else:
@@ -397,8 +398,7 @@ class Cmds(object):
             perms = None
             name = os.path.basename(src_path_name)
             dest_path_name = os.path.join(
-                                os.path.dirname(os.path.realpath(__file__)),
-                                name)
+                os.path.dirname(os.path.realpath(__file__)), name)
 
             # Before we move, lets store off the perms, so we can restore them
             # after the move
@@ -409,7 +409,8 @@ class Cmds(object):
             shutil.move(src_path_name, dest_path_name)
 
             if perms:
-                testlib.p('Setting perms: %s %s' % (dest_path_name, oct(perms)))
+                testlib.p('Setting perms: %s %s' % (dest_path_name,
+                                                    oct(perms)))
                 os.chmod(dest_path_name, perms)
 
         return "", 200, ""
@@ -492,9 +493,13 @@ if __name__ == "__main__":
         proxy_port = config['PROXY_PORT']
 
         testlib.p("Attempting connection to %s:%d" % (server, port))
-        NODE = testlib.TestNode(server, port, use_proxy=use_proxy,
-                                proxy_is_ip=proxy_is_ip, proxy_host=proxy_host,
-                                proxy_port=proxy_port)
+        NODE = testlib.TestNode(
+            server,
+            port,
+            use_proxy=use_proxy,
+            proxy_is_ip=proxy_is_ip,
+            proxy_host=proxy_host,
+            proxy_port=proxy_port)
 
         if NODE.connect():
             testlib.p("Connected!")
