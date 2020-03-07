@@ -303,7 +303,7 @@ def _tscmp(a, b):
 # Verify the payload using our shared secret with github
 def _verify_signature(payload_body, header_signature):
     # noinspection PyUnresolvedReferences
-    h = hmac.new(GIT_SECRET, payload_body, hashlib.sha1)
+    h = hmac.new(GIT_SECRET.encode("utf-8"), payload_body, hashlib.sha1)
     signature = 'sha1=' + h.hexdigest()
     try:
         # Python 2.7 and later have this which is suggested
