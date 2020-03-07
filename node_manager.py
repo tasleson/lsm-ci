@@ -61,6 +61,9 @@ TRUSTED_REPO_REMOTE = os.getenv(
     'https://raw.githubusercontent.com/' +
     'libstorage/libstoragemgmt/master/test/trusted.yaml')
 
+# When we test locally we don't want to try and set status on github.
+POST_STATUS = bool(os.getenv('POST_STATUS', ""))
+
 # File name for log file which is retrievable by client
 f_name = re.compile('[a-z]{32}.html')
 
@@ -140,12 +143,15 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
     if log_url:
         data["target_url"] = log_url
 
-    r = _post_with_retries(url, data, (USER, TOKEN))
-    if r.status_code == 201:
-        _p('We updated status url=%s data=%s' % (str(url), str(data)))
+    if POST_STATUS:
+        r = _post_with_retries(url, data, (USER, TOKEN))
+        if r.status_code == 201:
+            _p('We updated status url=%s data=%s' % (str(url), str(data)))
+        else:
+            _print_error(r, "Unexpected error on setting status url=%s data=%s "
+                         % (str(url), str(data)))
     else:
-        _print_error(r, "Unexpected error on setting status url=%s data=%s "
-                     % (str(url), str(data)))
+        _p('NOT POSTED: updated status url=%s data=%s' % (str(url), str(data)))
 
 
 def trusted_repo(info):
