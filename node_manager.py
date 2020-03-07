@@ -170,12 +170,12 @@ def trusted_repo(info):
 
         if result.status_code == 200:
             _p("Using github repo trusted file.")
-            trusted = yaml.load(result.text)
+            trusted = yaml.safe_load(result.text)
         else:
             if os.path.exists(TRUSTED_REPO_FN) and \
                     os.path.isfile(TRUSTED_REPO_FN):
                 with open(TRUSTED_REPO_FN, 'r') as tdata:
-                    trusted = yaml.load(tdata.read())
+                    trusted = yaml.safe_load(tdata.read())
 
         if info['clone'] in trusted['REPOS']:
             _create_status(info["repo"], info['sha'], 'success',
