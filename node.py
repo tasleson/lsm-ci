@@ -481,6 +481,7 @@ if __name__ == "__main__":
 
     _load_config()
 
+    have_connected = False
     # Connect to server
     while True:
         server = config['SERVER_IP']
@@ -497,6 +498,7 @@ if __name__ == "__main__":
 
         if NODE.connect():
             testlib.p("Connected!")
+            have_connected = True
             # noinspection PyBroadException
             try:
                 while True:
@@ -511,6 +513,12 @@ if __name__ == "__main__":
 
             # This probably won't do much as socket is quite likely toast
             NODE.disconnect()
+        else:
+            # Lets put in some hard coded alternatives if we've never been able
+            # to connect.  This is because we incorrectly distributed sample
+            # configuration files that used an IP.
+            if not have_connected:
+                pass
 
         # If we get here we need to re-establish connection, make sure we don't
         # swamp the processor
