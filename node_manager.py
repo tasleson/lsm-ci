@@ -156,7 +156,7 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
 
 def trusted_repo(info):
     """
-    Determine if we true a repo.
+    Determine if we trust a repo.
 
     We are opening the file each time, so we can update it without restarting
     # the service.
