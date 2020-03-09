@@ -487,16 +487,16 @@ if __name__ == "__main__":
 
     _load_config()
 
+    server = config['SERVER_IP']
+    port = config['SERVER_PORT']
+    proxy_is_ip = config['PROXY_IS_IP']
+    use_proxy = config['USE_PROXY']
+    proxy_host = config['PROXY_HOST']
+    proxy_port = config['PROXY_PORT']
+
     have_connected = False
     # Connect to server
     while True:
-        server = config['SERVER_IP']
-        port = config['SERVER_PORT']
-        proxy_is_ip = config['PROXY_IS_IP']
-        use_proxy = config['USE_PROXY']
-        proxy_host = config['PROXY_HOST']
-        proxy_port = config['PROXY_PORT']
-
         testlib.p("Attempting connection to %s:%d" % (server, port))
         NODE = testlib.TestNode(
             server,
