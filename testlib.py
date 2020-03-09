@@ -1,5 +1,11 @@
 """
 Shared code which is used in node_manager and node.
+
+WARNING!  This file is auto updated from the node manager.  Any changes will
+be lost when the client disconnects and reconnects.
+
+This file is compatible with python2 and python3.
+
 """
 #  See: https://github.com/tasleson/lsm-ci/blob/master/LICENSE
 

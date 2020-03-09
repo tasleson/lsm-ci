@@ -1,5 +1,10 @@
 #!/usr/bin/env python2
 """
+WARNING!  This file is auto updated from the node manager.  Any changes will
+be lost when the client disconnects and reconnects.
+
+This file is compatible with python2 and python3.
+
 Theory of operation
 1. Read the config file getting
    - Server and port to connect too

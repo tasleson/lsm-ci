@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# WARNING!  This file is auto updated from the node manager.  Any changes will
+# be lost when the client disconnects and reconnects.
+#
 # Grab the specified git source tree or rpm (when functionality added),
 # build it and run the specified plugin with the supplied uri and password
 
