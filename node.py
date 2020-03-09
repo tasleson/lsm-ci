@@ -494,12 +494,19 @@ if __name__ == "__main__":
     proxy_host = config['PROXY_HOST']
     proxy_port = config['PROXY_PORT']
 
-    have_connected = False
+    servers = [server, 'ci.asleson.org']
+    connection_count = 0
+
     # Connect to server
     while True:
-        testlib.p("Attempting connection to %s:%d" % (server, port))
+
+        # Round robin on IP address, starting with the one that is specified
+        # in user configuration.
+        server_addr = servers[connection_count % len(servers)]
+
+        testlib.p("Attempting connection to %s:%d" % (server_addr, port))
         NODE = testlib.TestNode(
-            server,
+            server_addr,
             port,
             use_proxy=use_proxy,
             proxy_is_ip=proxy_is_ip,
@@ -507,7 +514,7 @@ if __name__ == "__main__":
             proxy_port=proxy_port)
 
         if NODE.connect():
-            testlib.p("Connected!")
+            testlib.p("Connected to %s" % server_addr)
             have_connected = True
             # noinspection PyBroadException
             try:
@@ -524,11 +531,7 @@ if __name__ == "__main__":
             # This probably won't do much as socket is quite likely toast
             NODE.disconnect()
         else:
-            # Lets put in some hard coded alternatives if we've never been able
-            # to connect.  This is because we incorrectly distributed sample
-            # configuration files that used an IP.
-            if not have_connected:
-                pass
+            connection_count += 1
 
         # If we get here we need to re-establish connection, make sure we don't
         # swamp the processor
