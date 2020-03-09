@@ -1,0 +1,3 @@
+*.pyc
+*.pem
+start_node_manager.sh
