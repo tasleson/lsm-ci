@@ -15,6 +15,8 @@ import hashlib
 import sys
 import datetime
 import testlib
+import errno
+
 try:
     # noinspection PyUnresolvedReferences,PyCompatibility
     import Queue
@@ -191,12 +193,27 @@ def trusted_repo(info):
     return False
 
 
+def log_dir_create():
+    """
+    Check for the existence for logging dir, create if needed.
+    :return:
+    """
+    try:
+        os.makedirs(ERROR_LOG_DIR)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
+
 def run_tests(info):
     """
     Run the tests.
     :param info: Information about what is to be tested
     :return: None
     """
+
+    # Lets make sure the logging directory exists
+    log_dir_create()
 
     # As nodes can potentially come/go with errors we will get a list of what
     # we started with and will try to utilize them and only them for the
@@ -314,6 +331,9 @@ def request_queue():
     """
     global processing
     global processing_mutex
+
+    # Make sure logging directory exists
+    log_dir_create()
 
     while testlib.RUN.value:
 
