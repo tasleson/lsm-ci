@@ -56,7 +56,7 @@ if __name__ == '__main__':
     body['pull_request']['head']['repo'] = dict()
 
     body['pull_request']['base']['repo'][
-        'full_name'] = 'https://github.com/libstorage/libstoragemgmt.git'
+        'full_name'] = "libstorage/libstoragemgmt"
 
     body['pull_request']['head']['repo']['clone_url'] = args.clone_url
     body['pull_request']['head']['sha'] = args.sha1
