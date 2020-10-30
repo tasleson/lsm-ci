@@ -195,6 +195,9 @@ def p(msg):
     :param msg: Message to be printed
     :return: None
     """
+    # Make sure stderr is flushed before we print and flush to stdout
+    # this allows us to pickup bottle messages too
+    sys.stderr.flush()
     with print_lock:
         tid = ctypes.CDLL('libc.so.6').syscall(224)
         ts = datetime.datetime.fromtimestamp(
