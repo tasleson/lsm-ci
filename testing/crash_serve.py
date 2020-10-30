@@ -5,6 +5,8 @@ import socket
 import ssl
 import time
 import os
+import requests
+import random
 
 
 PORT_NUM_CONTROL = int(os.getenv('PORT_NUM_CONTROL', "43301"))
@@ -99,8 +101,21 @@ def open_write():
     time.sleep(0.2)
 
 
+def uri_control(path):
+    return "http://%s:%d/%s" % (IP_ADDRESS, PORT_NUM_CONTROL, path)
+
+
+def gets():
+
+    for n in ["nodes", "stats", "queue", "processing", "completed"]:
+        uri = uri_control(n)
+        print("uri = %s" % uri)
+        response = requests.get(url=uri)
+        print("status code = %d" % response.status_code)
+        print(response.text)
+
+
 while True:
-    failing_ssl()
-    open_write()
-    invalid_ssl_cert()
-    valid_ssl_cert()
+    tests = [gets, failing_ssl, open_write, invalid_ssl_cert, valid_ssl_cert]
+    the_one = tests[random.randrange(0, len(tests))]
+    the_one()
