@@ -328,9 +328,6 @@ class Node(object):
         return resp
 
     def __init__(self, accepted_socket, from_addr):
-        # If we get here we have an authenticated client, lets give them some
-        # wiggle room before we disconnect them.
-        accepted_socket.settimeout(3 * 60)
         self._state = Node.READY
         self.s = accepted_socket
         self.t = Transport(accepted_socket)
@@ -411,6 +408,16 @@ class Node(object):
             else:
                 p("Error when calling 'arrays' %s" % str(resp))
             return []
+
+    def increase_tmo(self):
+        """
+        Increase the timeout
+        :return: None
+        """
+        # If we get here we have an authenticated client that is
+        # responding so we will give it more time to avoid timeouts
+        with self.lock:
+            self.s.settimeout(3 * 60)
 
     def arrays_running(self):
         """
@@ -652,6 +659,9 @@ class NodeManager(object):
                             nc = Node(connection, from_addr)
 
                             arrays = sorted(nc.arrays())
+
+                            # We have a well behaved client, increase timeouts
+                            nc.increase_tmo()
 
                             msg = "Accepted a connection from %s: arrays= %s" \
                                     % (str(from_addr), str(arrays))
