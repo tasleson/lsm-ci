@@ -20,7 +20,7 @@ import errno
 try:
     # noinspection PyUnresolvedReferences,PyCompatibility
     import Queue
-except ModuleNotFoundError:
+except ImportError:
     # noinspection PyUnresolvedReferences,PyCompatibility,PyPep8Naming
     import queue as Queue
 
