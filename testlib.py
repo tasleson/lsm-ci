@@ -648,6 +648,17 @@ class NodeManager(object):
                             ca_certs="client_cert.pem",
                             cert_reqs=ssl.CERT_REQUIRED)
 
+                        # Make sure that if we trust the certificate chain
+                        # that we are using the one signed that has the
+                        # expected serial number.
+                        peer_cert = connection.getpeercert()
+                        if peer_cert is None or \
+                                peer_cert['serialNumber'] != 'B442051E67AA6DBF':
+                            _try_close(new_socket)
+                            p('Non-matching SN: rejecting %s (%s)' %
+                                (str(from_addr), str(peer_cert)))
+                            continue
+
                         with node_mgr.lock:
                             # If we already had this client, close previous and
                             # update with new.  We are expecting only one
