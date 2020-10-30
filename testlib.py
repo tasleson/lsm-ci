@@ -659,31 +659,31 @@ class NodeManager(object):
                                 (str(from_addr), str(peer_cert)))
                             continue
 
+                        nc = Node(connection, from_addr)
+                        arrays = nc.arrays()
+                        if arrays is None:
+                            nc.close()
+                            p('Node has no configured arrays, rejecting %s' %
+                                str(from_addr))
+                            continue
+
+                        # We have a well behaved client, increase timeouts
+                        nc.increase_tmo()
+
+                        msg = "Accepted a connection from %s: arrays= %s" \
+                                % (str(from_addr), str(arrays))
+
+                        client_id = NodeManager._client_id(
+                            from_addr[0], arrays)
+
+                        # If we already had this client, close previous and
+                        # update with new.  We are expecting only one
+                        # connection from any given unique IP.  We are
+                        # doing this so if the connection fails we can
+                        # re-associate to the same test node.  It is
+                        # possible both ends are up and functional
+                        # and the network goes down/up etc.
                         with node_mgr.lock:
-                            # If we already had this client, close previous and
-                            # update with new.  We are expecting only one
-                            # connection from any given unique IP.  We are
-                            # doing this so if the connection fails we can
-                            # re-associate to the same test node.  It is
-                            # possible both ends are up and functional
-                            # and the network goes down/up etc.
-                            nc = Node(connection, from_addr)
-                            arrays = nc.arrays()
-                            if arrays is None:
-                                nc.close()
-                                p('Node has no configured arrays, rejecting %s' %
-                                    str(from_addr))
-                                continue
-
-                            # We have a well behaved client, increase timeouts
-                            nc.increase_tmo()
-
-                            msg = "Accepted a connection from %s: arrays= %s" \
-                                    % (str(from_addr), str(arrays))
-
-                            client_id = NodeManager._client_id(
-                                from_addr[0], arrays)
-
                             if client_id in node_mgr.known_clients:
                                 p("%s: previously known %s" % (msg, client_id))
                                 node_mgr.known_clients[client_id].replace(nc)
@@ -692,7 +692,7 @@ class NodeManager(object):
                                                                     client_id))
                                 node_mgr.known_clients[client_id] = nc
 
-                            NodeManager.check_for_updates(nc)
+                        NodeManager.check_for_updates(nc)
 
                     # If all the nodes are doing nothing, lets ping them to
                     # ensure they still are present and responding
