@@ -399,15 +399,15 @@ class Node(object):
     def arrays(self):
         """
         Finds out what arrays are on a node.
-        :return: Array of information about storage arrays
+        :return: Array of information about storage arrays, None on error
         """
         with self.lock:
             resp = self._rpc('arrays')
             if resp and resp.ec == 200:
-                return resp.result
-            else:
-                p("Error when calling 'arrays' %s" % str(resp))
-            return []
+                return sorted(resp.result)
+
+            p("Error when calling 'arrays' %s" % str(resp))
+            return None
 
     def increase_tmo(self):
         """
@@ -657,8 +657,12 @@ class NodeManager(object):
                             # possible both ends are up and functional
                             # and the network goes down/up etc.
                             nc = Node(connection, from_addr)
-
-                            arrays = sorted(nc.arrays())
+                            arrays = nc.arrays()
+                            if arrays is None:
+                                nc.close()
+                                p('Node has no configured arrays, rejecting %s' %
+                                    str(from_addr))
+                                continue
 
                             # We have a well behaved client, increase timeouts
                             nc.increase_tmo()
