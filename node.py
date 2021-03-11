@@ -143,7 +143,7 @@ def _update_state(job_id):
     p = job['PROCESS']
     p.join(0)
     if not p.is_alive():
-        print('%s exited with %s ' % (p.name, str(p.exitcode)))
+        testlib.p('%s exited with %s ' % (p.name, str(p.exitcode)))
         sys.stdout.flush()
 
         if p.exitcode == 0:
