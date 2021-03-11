@@ -32,6 +32,7 @@ import yaml
 import os
 import json
 import sys
+import pickle
 from subprocess import call
 from multiprocessing import Process
 import testlib
@@ -73,24 +74,32 @@ def _file_name(job_id):
 
 
 def _run_command(job_id, args):
-    cmd = [config["PROGRAM"]]
-    log_dir = config["LOGDIR"]
+    ec = 0
 
-    cmd.extend(args)
+    try:
+        cmd = [config["PROGRAM"]]
+        log_dir = config["LOGDIR"]
 
-    (ec, output_file) = _lcall(cmd, job_id)
-    log = _file_name(job_id)
+        cmd.extend(args)
 
-    # Read in output file in it's entirety
-    with open(output_file, 'r') as o:
-        out = o.read()
+        (ec, output_file) = _lcall(cmd, job_id)
+        log = _file_name(job_id)
 
-    # Delete file to prevent /tmp from filling up
-    os.remove(output_file)
+        # Read in output file in it's entirety
+        with open(output_file, 'r') as o:
+            out = o.read()
 
-    with open(log, 'w') as error_file:
-        error_file.write(yaml.dump(dict(EC=str(ec), OUTPUT=out)))
-        error_file.flush()
+        with open(log, 'wb') as error_file:
+            pickle.dump(dict(EC=str(1), OUTPUT=out), error_file)
+            error_file.flush()
+
+        # Delete file to prevent /tmp from filling up, but after we have
+        # written out error file, in case we hit a bug
+        os.remove(output_file)
+    except Exception:
+        testlib.p("job_id = %s cmd = '%s', log_dir = %s" %
+                  (job_id, str(cmd), log_dir))
+        testlib.p(str(traceback.format_exc()))
 
     # This is a separate process, lets exit with the same exit code as cmd
     sys.exit(ec)
@@ -310,10 +319,14 @@ class Cmds(object):
             log = _file_name(job_id)
             if j['STATUS'] != "RUNNING":
                 try:
-                    with open(log, 'r') as foo:
-                        result = yaml.safe_load(foo.read())
+                    testlib.p("Retrieving log file: %s" % log)
+                    with open(log, 'rb') as foo:
+                        result = pickle.load(foo)
+
                     return json.dumps(result), 200, ""
                 except:
+                    testlib.p("Exception in retrieving log file!")
+                    testlib.p(str(traceback.format_exc()))
                     # We had a job in the hash, but an error while processing
                     # the log file, we will return a 404 and make sure the
                     # file is indeed gone
