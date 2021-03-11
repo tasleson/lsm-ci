@@ -126,9 +126,12 @@ def _load_config():
 
 
 def _remove_file(job_id):
+    fn = _file_name(job_id)
     try:
-        os.remove(_file_name(job_id))
+        testlib.p("Deleting file: %s" % fn)
+        os.remove(fn)
     except IOError as ioe:
+        testlib.p("Error deleting file: %s, reason: %s" % (fn, str(ioe)))
         pass
 
 
