@@ -341,6 +341,7 @@ class Cmds(object):
             else:
                 return "", 400, "Job still running"
         else:
+            testlib.p("Job ID %s not found in hash!" % job_id)
             return "", 404, "Job not found"
 
     @staticmethod
