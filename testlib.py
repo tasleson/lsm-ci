@@ -468,6 +468,12 @@ class Node(object):
             if resp and resp.ec == 200:
                 output = json.loads(resp.result)['OUTPUT']
                 return output
+
+            if resp:
+                p("Error: job_completion id = %s resp = %s" %
+                  (job_id, str(resp)))
+            else:
+                p("Error: job_completion, no response!")
             return None
 
     def job_delete(self, job_id):
