@@ -75,6 +75,8 @@ def _file_name(job_id):
 
 def _run_command(job_id, args):
     ec = 0
+    cmd = []
+    log_dir = ""
 
     try:
         cmd = [config["PROGRAM"]]
