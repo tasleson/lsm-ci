@@ -124,7 +124,8 @@ def _log_read(fn):
                 else:
                     out += "**** Line omitted as it contains a password ****\n"
             return out
-        except Exception:
+        except Exception as e:
+            _p("_log_read error: %s" % str(e))
             pass
     return None
 
