@@ -20,31 +20,31 @@ import datetime
 pp = pprint.PrettyPrinter(depth=4)
 
 # What Host/IP & port to serve on
-HOST = os.getenv('HOST', 'localhost')
-PORT = os.getenv('PORT', '8080')
+HOST = os.getenv("HOST", "localhost")
+PORT = os.getenv("PORT", "8080")
 
 # What github username and token to update commit status on
-USER = os.getenv('GIT_USER', '')
-TOKEN = os.getenv('GIT_TOKEN', '')
+USER = os.getenv("GIT_USER", "")
+TOKEN = os.getenv("GIT_TOKEN", "")
 
 # This is the API configured 'secret' for signing the payload from github ->
 # this service.
-GIT_SECRET = os.getenv('GIT_SECRET', '')
+GIT_SECRET = os.getenv("GIT_SECRET", "")
 
 
 # Credentials to talk to test service
 # TODO Place in yaml config file so that we can add services by editing text
 #      file and adding entries
-SNIA_USER = os.getenv('SNIA_USER', '')
-SNIA_TOKEN = os.getenv('SNIA_TOKEN', '')
-SNIA_URL = os.getenv('SNIA_URL', '')
+SNIA_USER = os.getenv("SNIA_USER", "")
+SNIA_TOKEN = os.getenv("SNIA_TOKEN", "")
+SNIA_URL = os.getenv("SNIA_URL", "")
 
 # Where to store the logs
-ERROR_LOG_DIR = os.getenv('CI_LOG_DIR', '/tmp/ci_log')
+ERROR_LOG_DIR = os.getenv("CI_LOG_DIR", "/tmp/ci_log")
 
 # Where to find the logs, this is the url in the github status update when
 # we have an error
-CI_SERVICE_URL = os.getenv('CI_URL', 'http://%s:%s/log' % (HOST, PORT))
+CI_SERVICE_URL = os.getenv("CI_URL", "http://%s:%s/log" % (HOST, PORT))
 
 # Global process list
 processes = []
@@ -56,8 +56,10 @@ def _request_with_retries(url):
             r = requests.get(url, auth=(SNIA_USER, SNIA_TOKEN))
             return r
         except requests.ConnectionError as ce:
-            _p("ConnectionError to (GET) %s : message(%s)" %
-               (SNIA_URL, str(ce)))
+            _p(
+                "ConnectionError to (GET) %s : message(%s)"
+                % (SNIA_URL, str(ce))
+            )
             _p("Trying again in 1 second")
             time.sleep(1)
 
@@ -68,21 +70,23 @@ def _post_with_retries(url, data, auth):
             r = requests.post(url, auth=auth, json=data)
             return r
         except requests.ConnectionError as ce:
-            _p("ConnectionError to (post) %s : message(%s)" %
-               (SNIA_URL, str(ce)))
+            _p(
+                "ConnectionError to (post) %s : message(%s)"
+                % (SNIA_URL, str(ce))
+            )
             _p("Trying again in 1 second")
             time.sleep(1)
 
 
 def _arrays_available():
-    r = _request_with_retries(SNIA_URL + '/' + 'arrays')
+    r = _request_with_retries(SNIA_URL + "/" + "arrays")
     if r.status_code == 200:
         return r.json()
     return []
 
 
 def _arrays_running():
-    r = _request_with_retries(SNIA_URL + '/' + 'running')
+    r = _request_with_retries(SNIA_URL + "/" + "running")
     if r.status_code == 200:
         return r.json()
     return []
@@ -96,37 +100,38 @@ def _print_error(req, msg):
 
 def _array_start(clone_url, branch, array_id):
     data = {"REPO": clone_url, "BRANCH": branch, "ID": array_id}
-    r = _post_with_retries(SNIA_URL + '/' + 'test', data,
-                           (SNIA_USER, SNIA_TOKEN))
+    r = _post_with_retries(
+        SNIA_URL + "/" + "test", data, (SNIA_USER, SNIA_TOKEN)
+    )
 
     if r.status_code != 201:
-        _print_error(r, 'Unexpected error on starting test')
+        _print_error(r, "Unexpected error on starting test")
         return None
     else:
         result = r.json()
-        return result['JOB_ID']
+        return result["JOB_ID"]
 
 
 def _log_write(job_id):
     url = "%s/log/%s" % (SNIA_URL, job_id)
     r = _request_with_retries(url)
     if r.status_code == 200:
-        data = r.json()['OUTPUT']
-        with open(ERROR_LOG_DIR + '/' + job_id + '.html', 'w') as log_file:
+        data = r.json()["OUTPUT"]
+        with open(ERROR_LOG_DIR + "/" + job_id + ".html", "w") as log_file:
             log_file.write(data)
 
 
 def _log_read(fn):
     data = ""
     # TODO Check to make sure file name is [a-z].html only, or do we need too?
-    with open(ERROR_LOG_DIR + '/' + fn, 'r') as log_file:
+    with open(ERROR_LOG_DIR + "/" + fn, "r") as log_file:
         data = log_file.readlines()
 
     out = ""
 
     # Make sure we don't expose plain word password in the log files.
     for line in data:
-        if 'password' not in line and 'Password' not in line:
+        if "password" not in line and "Password" not in line:
             out += line
         else:
             out += "**** Line omitted as it contains a password ****\n"
@@ -134,7 +139,7 @@ def _log_read(fn):
 
 
 def _jobs():
-    r = _request_with_retries(SNIA_URL + '/' + 'test')
+    r = _request_with_retries(SNIA_URL + "/" + "test")
     if r.status_code == 200:
         return r.json()
     return []
@@ -149,25 +154,25 @@ def _job_delete(job_id):
 
 # Note: A context is used to distinguish different origins of status
 def _create_status(repo, sha1, state, desc, context, log_url=None):
-    if '/' not in repo:
+    if "/" not in repo:
         raise Exception("Expecting repo to be in form user/repo %s" % repo)
 
-    url = 'https://api.github.com/repos/%s/statuses/%s' % (repo, sha1)
-    data = {'state': state, "description": desc, "context": context}
+    url = "https://api.github.com/repos/%s/statuses/%s" % (repo, sha1)
+    data = {"state": state, "description": desc, "context": context}
 
     if log_url:
         data["target_url"] = log_url
 
     r = _post_with_retries(url, data, (HOST, TOKEN))
     if r.status_code == 201:
-        _p('We updated status %s' % str(data))
+        _p("We updated status %s" % str(data))
     else:
         _print_error(r, "Unexpected error on setting status ")
 
 
 def _run_tests(info):
     jobs = {}
-    _p('Task running! %d' % os.getpid())
+    _p("Task running! %d" % os.getpid())
 
     # Connect to the various lab(s) and kick off builds for each of the
     # available plugins
@@ -175,11 +180,19 @@ def _run_tests(info):
 
     # Set all the status
     for a in arrays:
-        _create_status(info["repo"], info['sha'], "pending",
-                       'Plugin = %s started @ %s' %
-                       (a[1], datetime.datetime.fromtimestamp(
-                           time.time()).strftime('%m/%d %H:%M:%S')),
-                       a[0])
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "pending",
+            "Plugin = %s started @ %s"
+            % (
+                a[1],
+                datetime.datetime.fromtimestamp(time.time()).strftime(
+                    "%m/%d %H:%M:%S"
+                ),
+            ),
+            a[0],
+        )
 
     # Wait until all the arrays are free
     # TODO re-work this with some type of scheduler
@@ -189,18 +202,23 @@ def _run_tests(info):
             break
         time.sleep(30)
 
-    _p('Starting the tests!')
+    _p("Starting the tests!")
 
     # Start the tests
     for a in arrays:
-        job = _array_start(info['clone'], info['branch'], a[0])
+        job = _array_start(info["clone"], info["branch"], a[0])
         if job:
             jobs[job] = (a[0], a[1])
         else:
-            _create_status(info["repo"], info['sha'], "failure",
-                           'Plugin = ' + a[1] + 'failed to start', a[0])
+            _create_status(
+                info["repo"],
+                info["sha"],
+                "failure",
+                "Plugin = " + a[1] + "failed to start",
+                a[0],
+            )
 
-    _p('Tests started')
+    _p("Tests started")
 
     # Loop until they are all done
     running = _arrays_running()
@@ -211,31 +229,41 @@ def _run_tests(info):
     # Report status on each of them
     job_list = _jobs()
 
-    _p('Tests done, jobs = %s' % str(job_list))
+    _p("Tests done, jobs = %s" % str(job_list))
 
     for r in job_list:
-        job_id = r['JOB_ID']
-        array_id = r['ID']
-        status = r['STATUS']
-        plugin = r['PLUGIN']
+        job_id = r["JOB_ID"]
+        array_id = r["ID"]
+        status = r["STATUS"]
+        plugin = r["PLUGIN"]
 
-        if status == 'SUCCESS':
-            _create_status(info["repo"], info['sha'], 'success',
-                           'Plugin = ' + plugin, array_id)
+        if status == "SUCCESS":
+            _create_status(
+                info["repo"],
+                info["sha"],
+                "success",
+                "Plugin = " + plugin,
+                array_id,
+            )
         else:
             # Fetch the error log
             _log_write(job_id)
-            _create_status(info["repo"], info['sha'], 'failure',
-                           'Plugin = ' + plugin, array_id,
-                           '%s/%s.html' % (CI_SERVICE_URL, job_id))
+            _create_status(
+                info["repo"],
+                info["sha"],
+                "failure",
+                "Plugin = " + plugin,
+                array_id,
+                "%s/%s.html" % (CI_SERVICE_URL, job_id),
+            )
 
         # Delete the jobs
         _job_delete(job_id)
-    _p('Task completed!')
+    _p("Task completed!")
     sys.exit(0)
 
 
-@route('/log/<log_file>')
+@route("/log/<log_file>")
 def fetch(log_file):
     """
     Method which takes a given log file and reads it up to return.
@@ -245,7 +273,7 @@ def fetch(log_file):
     d = _log_read(log_file)
     if len(d) == 0:
         d = "Nothing to see here..."
-    return template('<pre>{{data}}</pre>', data=d)
+    return template("<pre>{{data}}</pre>", data=d)
 
 
 # Probably a poor attempt at a constant time compare function, derived from the
@@ -268,7 +296,7 @@ def _tscmp(a, b):
 def _verify_signature(payload_body, header_signature):
     # noinspection PyUnresolvedReferences
     h = hmac.new(GIT_SECRET, payload_body, hashlib.sha1)
-    signature = 'sha1=' + h.hexdigest()
+    signature = "sha1=" + h.hexdigest()
     try:
         # Python 2.7 and later have this which is suggested
         # noinspection PyUnresolvedReferences
@@ -285,7 +313,7 @@ def _clean_process_list():
     for p in processes:
         p.join(0)
         if not p.is_alive():
-            _p('%s exited with %s ' % (p.name, str(p.exitcode)))
+            _p("%s exited with %s " % (p.name, str(p.exitcode)))
             to_remove.append(p)
 
     for r in to_remove:
@@ -293,14 +321,15 @@ def _clean_process_list():
 
 
 def _p(msg):
-    ts = datetime.datetime.fromtimestamp(
-        time.time()).strftime('%Y-%m-%d %H:%M:%S')
+    ts = datetime.datetime.fromtimestamp(time.time()).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
     print("%s:%d:%s" % (ts, os.getpid(), msg))
     sys.stdout.flush()
 
 
 # Github calls this when we get a pull request
-@route('/event_handler', method='POST')
+@route("/event_handler", method="POST")
 def e_handler():
     """
     This is the handler that gets called when github has a new PR for us to
@@ -310,8 +339,9 @@ def e_handler():
     global processes
 
     # Check secret before we do anything
-    if not _verify_signature(request.body.read(),
-                             request.headers['X-Hub-Signature']):
+    if not _verify_signature(
+        request.body.read(), request.headers["X-Hub-Signature"]
+    ):
         response.status = 500
         return
 
@@ -323,13 +353,13 @@ def e_handler():
     # clean up.
     _clean_process_list()
 
-    if request.headers['X-Github-Event'] == 'pull_request':
+    if request.headers["X-Github-Event"] == "pull_request":
         repo = request.json["pull_request"]["base"]["repo"]["full_name"]
         clone = request.json["pull_request"]["head"]["repo"]["clone_url"]
-        sha = request.json["pull_request"]['head']['sha']
-        branch = request.json["pull_request"]['head']['ref']
+        sha = request.json["pull_request"]["head"]["sha"]
+        branch = request.json["pull_request"]["head"]["ref"]
 
-        _p('Running unit tests for %s %s' % (clone, branch))
+        _p("Running unit tests for %s %s" % (clone, branch))
 
         info = dict(repo=repo, sha=sha, branch=branch, clone=clone)
 
@@ -341,7 +371,7 @@ def e_handler():
     else:
         _p("Got an unexpected header from github")
         for k, v in request.headers.items():
-            _p('%s:%s' % (str(k), str(v)))
+            _p("%s:%s" % (str(k), str(v)))
         pp.pprint(request.json)
         sys.stdout.flush()
 

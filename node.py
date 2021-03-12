@@ -55,9 +55,9 @@ def _lcall(command, job_id):
     """
 
     # Write output to a file so we can see what's going on while it's running
-    f = '/tmp/%s.out' % job_id
+    f = "/tmp/%s.out" % job_id
 
-    with open(f, 'w', buffering=1) as log:  # Max buffer 1 line (text mode)
+    with open(f, "w", buffering=1) as log:  # Max buffer 1 line (text mode)
         exit_value = call(command, stdout=log, stderr=log)
     return exit_value, f
 
@@ -69,7 +69,7 @@ def _file_name(job_id):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    base = '%s/%s' % (log_dir, job_id)
+    base = "%s/%s" % (log_dir, job_id)
     return base + ".out"
 
 
@@ -86,10 +86,10 @@ def _run_command(job_id, args):
         log = _file_name(job_id)
 
         # Read in output file in it's entirety
-        with open(output_file, 'r') as o:
+        with open(output_file, "r") as o:
             out = o.read()
 
-        with open(log, 'wb') as error_file:
+        with open(log, "wb") as error_file:
             pickle.dump(dict(EC=str(1), OUTPUT=out), error_file)
             error_file.flush()
 
@@ -97,8 +97,9 @@ def _run_command(job_id, args):
         # written out error file, in case we hit a bug
         os.remove(output_file)
     except Exception:
-        testlib.p("job_id = %s cmd = '%s', log_dir = %s" %
-                  (job_id, str(cmd), log_dir))
+        testlib.p(
+            "job_id = %s cmd = '%s', log_dir = %s" % (job_id, str(cmd), log_dir)
+        )
         testlib.p(str(traceback.format_exc()))
 
     # This is a separate process, lets exit with the same exit code as cmd
@@ -106,31 +107,38 @@ def _run_command(job_id, args):
 
 
 def _rs(length):
-    return ''.join(
-        random.choice(string.ascii_lowercase) for _ in range(length))
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
 
 
 def _load_config():
     global config
     cfg = os.path.dirname(os.path.realpath(__file__)) + "/" + "config.yaml"
-    with open(cfg, 'r') as array_data:
+    with open(cfg, "r") as array_data:
         config = yaml.safe_load(array_data.read())
 
     # If the user didn't specify a full path in the configuration file we
     # expect it in the same directory as this file
-    if config['PROGRAM'][0] != '/':
-        config['PROGRAM'] = os.path.dirname(os.path.realpath(__file__)) + \
-                            '/' + config['PROGRAM']
+    if config["PROGRAM"][0] != "/":
+        config["PROGRAM"] = (
+            os.path.dirname(os.path.realpath(__file__))
+            + "/"
+            + config["PROGRAM"]
+        )
 
     # Lets make sure import external files/directories are present
-    if not os.path.exists(config['PROGRAM']):
-        testlib.p("config PROGRAM %s does not exist" % config['PROGRAM'])
+    if not os.path.exists(config["PROGRAM"]):
+        testlib.p("config PROGRAM %s does not exist" % config["PROGRAM"])
         sys.exit(1)
 
-    if not (os.path.exists(config['LOGDIR']) and os.path.isdir(
-            config['LOGDIR']) and os.access(config['LOGDIR'], os.W_OK)):
-        testlib.p("config LOGDIR not preset or not a "
-                  "directory %s or not writeable" % (config['LOGDIR']))
+    if not (
+        os.path.exists(config["LOGDIR"])
+        and os.path.isdir(config["LOGDIR"])
+        and os.access(config["LOGDIR"], os.W_OK)
+    ):
+        testlib.p(
+            "config LOGDIR not preset or not a "
+            "directory %s or not writeable" % (config["LOGDIR"])
+        )
         sys.exit(1)
 
 
@@ -149,28 +157,28 @@ def _update_state(job_id):
     job = jobs[job_id]
 
     # See if the process has ended
-    p = job['PROCESS']
+    p = job["PROCESS"]
     p.join(0)
     if not p.is_alive():
-        testlib.p('%s exited with %s ' % (p.name, str(p.exitcode)))
+        testlib.p("%s exited with %s " % (p.name, str(p.exitcode)))
         sys.stdout.flush()
 
         if p.exitcode == 0:
-            job['STATUS'] = 'SUCCESS'
+            job["STATUS"] = "SUCCESS"
         else:
-            job['STATUS'] = 'FAIL'
+            job["STATUS"] = "FAIL"
 
 
 def _return_state(job_id, only_running=False):
     _update_state(job_id)
     job = jobs[job_id]
 
-    if not only_running or (only_running and job["STATUS"] == 'RUNNING'):
+    if not only_running or (only_running and job["STATUS"] == "RUNNING"):
         return {
             "STATUS": job["STATUS"],
-            "ID": job['ID'],
+            "ID": job["ID"],
             "JOB_ID": job_id,
-            "PLUGIN": job['PLUGIN']
+            "PLUGIN": job["PLUGIN"],
         }
     return None
 
@@ -208,7 +216,7 @@ class Cmds(object):
         :return: array of tuples which gets converted into JSON and http 200
             status code.
         """
-        rc = [(x['ID'], x['PLUGIN']) for x in config['ARRAYS']]
+        rc = [(x["ID"], x["PLUGIN"]) for x in config["ARRAYS"]]
         return rc, 200, ""
 
     @staticmethod
@@ -241,15 +249,15 @@ class Cmds(object):
 
         testlib.p("Running test for %s %s %s" % (repo, branch, array_id))
 
-        if any([x for x in config['ARRAYS'] if x['ID'] == array_id]):
+        if any([x for x in config["ARRAYS"] if x["ID"] == array_id]):
 
             # Add a check to make sure we aren't already _running_
             # a job for this array
             for k, v in jobs.items():
-                if v['ID'] == array_id:
+                if v["ID"] == array_id:
                     # Update status to make sure
                     _update_state(k)
-                    if v['STATUS'] == 'RUNNING':
+                    if v["STATUS"] == "RUNNING":
                         return "", 412, "Job already running on array"
 
             # Run the job
@@ -258,23 +266,24 @@ class Cmds(object):
             password = ""
             plug = ""
 
-            for a in config['ARRAYS']:
-                if a['ID'] == array_id:
-                    uri = a['URI']
-                    password = a['PASSWORD']
-                    plug = a['PLUGIN']
+            for a in config["ARRAYS"]:
+                if a["ID"] == array_id:
+                    uri = a["URI"]
+                    password = a["PASSWORD"]
+                    plug = a["PLUGIN"]
                     break
 
             # When we add rpm builds we will need client to pass
             # which 'type' too
-            incoming = ('git', repo, branch, uri, password)
+            incoming = ("git", repo, branch, uri, password)
             job_id = _rs(32)
             p = Process(target=_run_command, args=(job_id, incoming))
             p.name = "|".join(incoming)
             p.start()
 
             jobs[job_id] = dict(
-                STATUS='RUNNING', PROCESS=p, ID=array_id, PLUGIN=plug)
+                STATUS="RUNNING", PROCESS=p, ID=array_id, PLUGIN=plug
+            )
             return job_id, 201, ""
         else:
             return "", 400, "Invalid array specified!"
@@ -317,10 +326,10 @@ class Cmds(object):
         if job_id in jobs:
             j = jobs[job_id]
             log = _file_name(job_id)
-            if j['STATUS'] != "RUNNING":
+            if j["STATUS"] != "RUNNING":
                 try:
                     testlib.p("Retrieving log file: %s" % log)
-                    with open(log, 'rb') as foo:
+                    with open(log, "rb") as foo:
                         result = pickle.load(foo)
 
                     return json.dumps(result), 200, ""
@@ -357,7 +366,7 @@ class Cmds(object):
         if job_id in jobs:
             j = jobs[job_id]
 
-            if j['STATUS'] != "RUNNING":
+            if j["STATUS"] != "RUNNING":
                 del jobs[job_id]
                 _remove_file(job_id)
                 return "", 200, ""
@@ -378,17 +387,22 @@ class Cmds(object):
         rc = []
 
         for file_name in files:
-            if '/' in file_name:
-                return rc, 412, 'File %s contains illegal character' % file_name
+            if "/" in file_name:
+                return (
+                    rc,
+                    412,
+                    "File %s contains illegal character" % file_name,
+                )
 
             full_fn = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)), file_name)
+                os.path.dirname(os.path.realpath(__file__)), file_name
+            )
             if os.path.exists(full_fn) and os.path.isfile(full_fn):
                 rc.append(testlib.file_md5(full_fn))
             else:
                 # If a file doesn't exist lets return a bogus value, then the
                 # server will push the new file down.
-                rc.append('File not found!')
+                rc.append("File not found!")
 
         return rc, 200, ""
 
@@ -398,16 +412,16 @@ class Cmds(object):
 
         # Dump the file locally to temp directory
         for i in file_data:
-            fn = i['fn']
-            data = i['data']
-            md5 = i['md5']
+            fn = i["fn"]
+            data = i["data"]
+            md5 = i["md5"]
 
-            if '/' in fn:
+            if "/" in fn:
                 return "", 412, "File name has directory sep. in it! %s" % fn
 
             tmp_file = os.path.join(tmp_dir, fn)
 
-            with open(tmp_file, 'w') as t:
+            with open(tmp_file, "w") as t:
                 t.write(data)
 
             if md5 != testlib.file_md5(tmp_file):
@@ -420,19 +434,19 @@ class Cmds(object):
             perms = None
             name = os.path.basename(src_path_name)
             dest_path_name = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)), name)
+                os.path.dirname(os.path.realpath(__file__)), name
+            )
 
             # Before we move, lets store off the perms, so we can restore them
             # after the move
             if os.path.exists(dest_path_name):
-                perms = (os.stat(dest_path_name).st_mode & 0o777)
+                perms = os.stat(dest_path_name).st_mode & 0o777
 
-            testlib.p('Moving: %s -> %s' % (src_path_name, dest_path_name))
+            testlib.p("Moving: %s -> %s" % (src_path_name, dest_path_name))
             shutil.move(src_path_name, dest_path_name)
 
             if perms:
-                testlib.p('Setting perms: %s %s' % (dest_path_name,
-                                                    oct(perms)))
+                testlib.p("Setting perms: %s %s" % (dest_path_name, oct(perms)))
                 os.chmod(dest_path_name, perms)
 
         return "", 200, ""
@@ -452,13 +466,16 @@ class Cmds(object):
         # Create a temp directory
         td = tempfile.mkdtemp()
 
-        testlib.p('Updating client files!')
+        testlib.p("Updating client files!")
 
         try:
             result = Cmds._update_files(td, file_data)
         except:
-            result = "", 412, "Exception on file update %s " % \
-                     str(traceback.format_exc())
+            result = (
+                "",
+                412,
+                "Exception on file update %s " % str(traceback.format_exc()),
+            )
 
         # Remove tmp directory and the files we left in it
         shutil.rmtree(td)
@@ -471,7 +488,7 @@ class Cmds(object):
         :return: None
         """
         global NODE
-        testlib.p('Restarting node as requested by node_manager')
+        testlib.p("Restarting node as requested by node_manager")
         os.chdir(STARTUP_CWD)
         NODE.disconnect()
         os.execl(sys.executable, *([sys.executable] + sys.argv))
@@ -504,14 +521,14 @@ if __name__ == "__main__":
 
     _load_config()
 
-    server = config['SERVER_IP']
-    port = config['SERVER_PORT']
-    proxy_is_ip = config['PROXY_IS_IP']
-    use_proxy = config['USE_PROXY']
-    proxy_host = config['PROXY_HOST']
-    proxy_port = config['PROXY_PORT']
+    server = config["SERVER_IP"]
+    port = config["SERVER_PORT"]
+    proxy_is_ip = config["PROXY_IS_IP"]
+    use_proxy = config["USE_PROXY"]
+    proxy_host = config["PROXY_HOST"]
+    proxy_port = config["PROXY_PORT"]
 
-    servers = [server, 'ci.asleson.org']
+    servers = [server, "ci.asleson.org"]
     connection_count = 0
 
     # Connect to server
@@ -528,7 +545,8 @@ if __name__ == "__main__":
             use_proxy=use_proxy,
             proxy_is_ip=proxy_is_ip,
             proxy_host=proxy_host,
-            proxy_port=proxy_port)
+            proxy_port=proxy_port,
+        )
 
         if NODE.connect():
             testlib.p("Connected to %s" % server_addr)

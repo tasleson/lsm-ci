@@ -9,8 +9,8 @@ import requests
 import random
 
 
-PORT_NUM_CONTROL = int(os.getenv('PORT_NUM_CONTROL', "43301"))
-PORT_NUM_PEER_SSL = int(os.getenv('PORT_NUM_PEER_SSL', "443"))
+PORT_NUM_CONTROL = int(os.getenv("PORT_NUM_CONTROL", "43301"))
+PORT_NUM_PEER_SSL = int(os.getenv("PORT_NUM_PEER_SSL", "443"))
 IP_ADDRESS = os.getenv("IP_ADDRESS", "127.0.0.1")
 
 
@@ -40,11 +40,13 @@ def invalid_ssl_cert():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print("Created socket!")
-        ssl_sock = ssl.wrap_socket(s,
-                                   ca_certs="wrong_server_cert.pem",
-                                   cert_reqs=ssl.CERT_REQUIRED,
-                                   certfile="wrong_client_cert.pem",
-                                   keyfile="wrong_client_key.pem")
+        ssl_sock = ssl.wrap_socket(
+            s,
+            ca_certs="wrong_server_cert.pem",
+            cert_reqs=ssl.CERT_REQUIRED,
+            certfile="wrong_client_cert.pem",
+            keyfile="wrong_client_key.pem",
+        )
         print("Have ssl_sock!")
         ssl_sock.connect((IP_ADDRESS, PORT_NUM_PEER_SSL))
         print("invalid_ssl_cert: connected")
@@ -64,11 +66,13 @@ def valid_ssl_cert():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print("Created socket!")
-        ssl_sock = ssl.wrap_socket(s,
-                                   ca_certs="server_cert.pem",
-                                   cert_reqs=ssl.CERT_REQUIRED,
-                                   certfile="client_cert.pem",
-                                   keyfile="client_key.pem")
+        ssl_sock = ssl.wrap_socket(
+            s,
+            ca_certs="server_cert.pem",
+            cert_reqs=ssl.CERT_REQUIRED,
+            certfile="client_cert.pem",
+            keyfile="client_key.pem",
+        )
         print("Have ssl_sock!")
         ssl_sock.connect((IP_ADDRESS, PORT_NUM_PEER_SSL))
         print("valid_ssl_cert: connected")
@@ -86,7 +90,7 @@ def open_write():
     :return:
     """
 
-    d = '#' * 64
+    d = "#" * 64
     to_send = d.encode("utf-8")
 
     try:

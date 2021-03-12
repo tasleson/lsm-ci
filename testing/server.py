@@ -11,12 +11,12 @@ import sys
 
 bindsocket = socket.socket()
 bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-bindsocket.bind(('', 8675))
+bindsocket.bind(("", 8675))
 bindsocket.listen(5)
 
 while True:
 
-    print('Waiting for a client...')
+    print("Waiting for a client...")
     new_socket, from_addr = bindsocket.accept()
     print("Accepted a connection from %s" % str(from_addr))
 
@@ -26,7 +26,8 @@ while True:
         certfile="server_cert.pem",
         keyfile="server_key.pem",
         ca_certs="client_cert.pem",
-        cert_reqs=ssl.CERT_REQUIRED)
+        cert_reqs=ssl.CERT_REQUIRED,
+    )
 
     in_line = "start"
 

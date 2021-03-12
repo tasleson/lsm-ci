@@ -35,37 +35,39 @@ import yaml
 pp = pprint.PrettyPrinter(depth=4)
 
 # What Host/IP & port to serve on
-HOST = os.getenv('HOST', 'localhost')
-PORT = os.getenv('PORT', '8080')
+HOST = os.getenv("HOST", "localhost")
+PORT = os.getenv("PORT", "8080")
 
 # What github username and token to update commit status on
-USER = os.getenv('GIT_USER', '')
-TOKEN = os.getenv('GIT_TOKEN', '')
+USER = os.getenv("GIT_USER", "")
+TOKEN = os.getenv("GIT_TOKEN", "")
 
 # This is the API configured 'secret' for signing the payload from github ->
 # this service.
-GIT_SECRET = os.getenv('GIT_SECRET', '')
+GIT_SECRET = os.getenv("GIT_SECRET", "")
 
 # Where to store the logs
-ERROR_LOG_DIR = os.getenv('CI_LOG_DIR', '/tmp/ci_log')
+ERROR_LOG_DIR = os.getenv("CI_LOG_DIR", "/tmp/ci_log")
 
 # Where to find the logs, this is the url in the github status update when
 # we have an error
-CI_SERVICE_URL = os.getenv('CI_URL', 'http://%s:%s/log' % (HOST, PORT))
+CI_SERVICE_URL = os.getenv("CI_URL", "http://%s:%s/log" % (HOST, PORT))
 
 # The file with trusted repos in it
-TRUSTED_REPO_FN = os.getenv('TRUSTED_REPOS', '')
+TRUSTED_REPO_FN = os.getenv("TRUSTED_REPOS", "")
 
 # Full path to trusted file on repo itself
 TRUSTED_REPO_REMOTE = os.getenv(
-    'TRUSTED_REPOS_REMOTE', 'https://raw.githubusercontent.com/' +
-    'libstorage/libstoragemgmt/master/test/trusted.yaml')
+    "TRUSTED_REPOS_REMOTE",
+    "https://raw.githubusercontent.com/"
+    + "libstorage/libstoragemgmt/master/test/trusted.yaml",
+)
 
 # When we test locally we don't want to try and set status on github.
-POST_STATUS = bool(os.getenv('POST_STATUS', ""))
+POST_STATUS = bool(os.getenv("POST_STATUS", ""))
 
 # File name for log file which is retrievable by client
-f_name = re.compile('[a-z]{32}.html')
+f_name = re.compile("[a-z]{32}.html")
 
 # We are storing a history of work, so that we can go back and re-run as needed
 work_log = deque(maxlen=20)
@@ -92,8 +94,10 @@ def _post_with_retries(url, data, auth):
 
 def _print_error(req, msg):
     formatted_json = pp.pformat(req.json())
-    _p("%s status code = %d, \nJSON: \n%s\n" % (msg, req.status_code,
-                                                formatted_json))
+    _p(
+        "%s status code = %d, \nJSON: \n%s\n"
+        % (msg, req.status_code, formatted_json)
+    )
 
 
 def _log_write(node, job_id):
@@ -103,7 +107,7 @@ def _log_write(node, job_id):
         # Node is down, not much to say here!
         data = "Unable to retrieve log, node not unavailable or hitting a bug!"
 
-    with open(ERROR_LOG_DIR + '/' + job_id + '.html', 'w') as log_file:
+    with open(ERROR_LOG_DIR + "/" + job_id + ".html", "w") as log_file:
         log_file.write(data)
 
 
@@ -113,13 +117,13 @@ def _log_read(fn):
     if f_name.match(fn):
         # noinspection PyBroadException
         try:
-            with open(ERROR_LOG_DIR + '/' + fn, 'r') as log_file:
+            with open(ERROR_LOG_DIR + "/" + fn, "r") as log_file:
                 data = log_file.readlines()
 
             out = ""
 
             for line in data:
-                if 'password' not in line and 'Password' not in line:
+                if "password" not in line and "Password" not in line:
                     out += line
                 else:
                     out += "**** Line omitted as it contains a password ****\n"
@@ -133,11 +137,11 @@ def _log_read(fn):
 # Note: A context is used to distinguish different origins of status
 def _create_status(repo, sha1, state, desc, context, log_url=None):
 
-    if '/' not in repo:
+    if "/" not in repo:
         raise Exception("Expecting repo to be in form user/repo %s" % repo)
 
-    url = 'https://api.github.com/repos/%s/statuses/%s' % (repo, sha1)
-    data = {'state': state, "description": desc, "context": context}
+    url = "https://api.github.com/repos/%s/statuses/%s" % (repo, sha1)
+    data = {"state": state, "description": desc, "context": context}
 
     if log_url:
         data["target_url"] = log_url
@@ -145,13 +149,15 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
     if POST_STATUS:
         r = _post_with_retries(url, data, (USER, TOKEN))
         if r.status_code == 201:
-            _p('We updated status url=%s data=%s' % (str(url), str(data)))
+            _p("We updated status url=%s data=%s" % (str(url), str(data)))
         else:
-            _print_error(r,
-                         "Unexpected error on setting status url=%s data=%s " %
-                         (str(url), str(data)))
+            _print_error(
+                r,
+                "Unexpected error on setting status url=%s data=%s "
+                % (str(url), str(data)),
+            )
     else:
-        _p('NOT POSTED: updated status url=%s data=%s' % (str(url), str(data)))
+        _p("NOT POSTED: updated status url=%s data=%s" % (str(url), str(data)))
 
 
 def trusted_repo(info):
@@ -175,22 +181,38 @@ def trusted_repo(info):
             _p("Using github repo trusted file.")
             trusted = yaml.safe_load(result.text)
         else:
-            if os.path.exists(TRUSTED_REPO_FN) and \
-                    os.path.isfile(TRUSTED_REPO_FN):
-                with open(TRUSTED_REPO_FN, 'r') as tdata:
+            if os.path.exists(TRUSTED_REPO_FN) and os.path.isfile(
+                TRUSTED_REPO_FN
+            ):
+                with open(TRUSTED_REPO_FN, "r") as tdata:
                     trusted = yaml.safe_load(tdata.read())
 
-        if info['clone'] in trusted['REPOS']:
-            _create_status(info["repo"], info['sha'], 'success',
-                           'Repo trusted', 'CI permissions')
+        if info["clone"] in trusted["REPOS"]:
+            _create_status(
+                info["repo"],
+                info["sha"],
+                "success",
+                "Repo trusted",
+                "CI permissions",
+            )
             return True
         else:
-            _create_status(info["repo"], info['sha'], 'failure',
-                           'Repo untrusted', 'CI permissions')
+            _create_status(
+                info["repo"],
+                info["sha"],
+                "failure",
+                "Repo untrusted",
+                "CI permissions",
+            )
     except Exception as e:
-        _p('Unable to retrieve trusted repo list! %s' % str(e))
-        _create_status(info["repo"], info['sha'], 'failure', 'WL unavailable!',
-                       'CI permissions')
+        _p("Unable to retrieve trusted repo list! %s" % str(e))
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "failure",
+            "WL unavailable!",
+            "CI permissions",
+        )
     return False
 
 
@@ -234,25 +256,39 @@ def run_tests(info):
 
         # Set all the status
         for a in arrays:
-            _create_status(info["repo"], info['sha'], "pending",
-                           'Plugin = %s started @ %s' %
-                           (a[1], datetime.datetime.fromtimestamp(
-                               time.time()).strftime('%m/%d %H:%M:%S')), a[0])
+            _create_status(
+                info["repo"],
+                info["sha"],
+                "pending",
+                "Plugin = %s started @ %s"
+                % (
+                    a[1],
+                    datetime.datetime.fromtimestamp(time.time()).strftime(
+                        "%m/%d %H:%M:%S"
+                    ),
+                ),
+                a[0],
+            )
 
-    _p('Starting the tests')
+    _p("Starting the tests")
 
     # Start the tests
     for n in connected_nodes:
         arrays = n.arrays()
         for a in n.arrays():
-            job = n.start_test(info['clone'], info['branch'], a[0])
+            job = n.start_test(info["clone"], info["branch"], a[0])
             if job:
                 _p("Test started for %s job = %s" % (a[0], job))
             else:
-                _create_status(info["repo"], info['sha'], "failure",
-                               'Plugin = ' + a[1] + 'failed to start', a[0])
+                _create_status(
+                    info["repo"],
+                    info["sha"],
+                    "failure",
+                    "Plugin = " + a[1] + "failed to start",
+                    a[0],
+                )
 
-    _p('Tests started')
+    _p("Tests started")
 
     # Monitor and report status as they are completed
     all_done = False
@@ -264,26 +300,37 @@ def run_tests(info):
             job_list = n.jobs()
 
             for r in job_list:
-                job_id = r['JOB_ID']
-                array_id = r['ID']
-                status = r['STATUS']
-                plugin = r['PLUGIN']
+                job_id = r["JOB_ID"]
+                array_id = r["ID"]
+                status = r["STATUS"]
+                plugin = r["PLUGIN"]
 
-                if status == 'RUNNING':
+                if status == "RUNNING":
                     all_done = False
                 else:
-                    if status == 'SUCCESS':
-                        _create_status(info["repo"], info['sha'], 'success',
-                                       'Plugin = ' + plugin, array_id)
+                    if status == "SUCCESS":
+                        _create_status(
+                            info["repo"],
+                            info["sha"],
+                            "success",
+                            "Plugin = " + plugin,
+                            array_id,
+                        )
 
-                        info['status'] = 'SUCCESS'
+                        info["status"] = "SUCCESS"
                     else:
-                        url = '%s/%s.html' % (CI_SERVICE_URL, job_id)
-                        info['status'] = url
+                        url = "%s/%s.html" % (CI_SERVICE_URL, job_id)
+                        info["status"] = url
                         # Fetch the error log, log error data and status
                         _log_write(n, job_id)
-                        _create_status(info["repo"], info['sha'], 'failure',
-                                       'Plugin = ' + plugin, array_id, url)
+                        _create_status(
+                            info["repo"],
+                            info["sha"],
+                            "failure",
+                            "Plugin = " + plugin,
+                            array_id,
+                            url,
+                        )
 
                     # Delete the job if it's not running.
                     n.job_delete(job_id)
@@ -292,7 +339,7 @@ def run_tests(info):
 
     work_log.append(info)
 
-    _p('Test run completed')
+    _p("Test run completed")
 
 
 # Probably a poor attempt at a constant time compare function, derived from the
@@ -315,7 +362,7 @@ def _tscmp(a, b):
 def _verify_signature(payload_body, header_signature):
     # noinspection PyUnresolvedReferences
     h = hmac.new(GIT_SECRET.encode("utf-8"), payload_body, hashlib.sha1)
-    signature = 'sha1=' + h.hexdigest()
+    signature = "sha1=" + h.hexdigest()
     try:
         # Python 2.7 and later have this which is suggested
         # noinspection PyUnresolvedReferences
@@ -355,10 +402,10 @@ def request_queue():
             st = traceback.format_exc()
             _p("request_queue: unexpected exception: %s" % st)
 
-    _p('Exiting request_queue')
+    _p("Exiting request_queue")
 
 
-@route('/completed')
+@route("/completed")
 def completed_requests():
     """
     Handles the request for what has been completed.
@@ -367,7 +414,7 @@ def completed_requests():
     rc = []
     c_r = reversed(list(work_log))
 
-    response.content_type = 'application/json'
+    response.content_type = "application/json"
 
     for i in c_r:
         rc.append(i)
@@ -375,7 +422,7 @@ def completed_requests():
     return json.dumps(rc)
 
 
-@route('/processing')
+@route("/processing")
 def processing_requests():
     """
     Handles the request for what is in processing.
@@ -385,7 +432,7 @@ def processing_requests():
     global processing_mutex
     rc = []
 
-    response.content_type = 'application/json'
+    response.content_type = "application/json"
 
     with processing_mutex:
         if processing:
@@ -394,7 +441,7 @@ def processing_requests():
     return json.dumps(rc)
 
 
-@route('/rerun/<test_id>')
+@route("/rerun/<test_id>")
 def rerun_test(test_id):
     """
     Re-runs a test
@@ -416,15 +463,16 @@ def rerun_test(test_id):
 
     for i in list(work_log):
         # noinspection PyTypeChecker
-        if int(i['test_run_id']) == int(test_id):
+        if int(i["test_run_id"]) == int(test_id):
             # Try to make the test counts unique
             cpy = copy.deepcopy(i)
 
-            _p('Re-running test: client IP %s: %s %s' % (request.remote_addr,
-                                                         str(test_id),
-                                                         str(cpy)))
+            _p(
+                "Re-running test: client IP %s: %s %s"
+                % (request.remote_addr, str(test_id), str(cpy))
+            )
 
-            cpy['test_run_id'] = test_count
+            cpy["test_run_id"] = test_count
             test_count += 1
             req_q.put(cpy)
             response.status = 200
@@ -438,7 +486,7 @@ def rerun_test(test_id):
 
 # Return what clients we have connected to us
 # Note: Don't leak too much information
-@route('/nodes')
+@route("/nodes")
 def nodes():
     """
     Returns connected clients.
@@ -450,28 +498,28 @@ def nodes():
     for n in node_mgr.nodes():
         rc.extend(n.arrays())
 
-    response.content_type = 'application/json'
+    response.content_type = "application/json"
     return json.dumps(rc)
 
 
-@route('/stats')
+@route("/stats")
 def stats():
     """
     Returns information on current request queue size.
     :return: JSON representation of queue size, eg. {"QUEUE_SIZE": 0}
     """
-    response.content_type = 'application/json'
+    response.content_type = "application/json"
     return json.dumps(dict(QUEUE_SIZE=req_q.qsize()))
 
 
-@route('/queue')
+@route("/queue")
 def queue():
     """
     Returns what's in the queue
     :return: Items in request Q as JSON.
     """
     rc = []
-    response.content_type = 'application/json'
+    response.content_type = "application/json"
 
     wq = list(req_q.queue)
     for i in wq:
@@ -480,7 +528,7 @@ def queue():
     return json.dumps(rc)
 
 
-@route('/log/<log_file>')
+@route("/log/<log_file>")
 def fetch(log_file):
     """
     A URL is given back to github on error, clients web browsers will call this
@@ -493,14 +541,14 @@ def fetch(log_file):
     if d:
         if len(d) == 0:
             d = "Nothing to see here..."
-        return template('<pre>{{data}}</pre>', data=d)
+        return template("<pre>{{data}}</pre>", data=d)
 
     # Wrong or missing file or invalid file name
     response.status = 500
     return
 
 
-@route('/event_handler', method='POST')
+@route("/event_handler", method="POST")
 def e_handler():
     """
     Github calls this when we get a pull request
@@ -509,38 +557,44 @@ def e_handler():
     global test_count
 
     # Check secret before we do *anything*
-    if not _verify_signature(request.body.read(),
-                             request.headers['X-Hub-Signature']):
+    if not _verify_signature(
+        request.body.read(), request.headers["X-Hub-Signature"]
+    ):
         response.status = 500
         return
 
-    if request.headers['X-Github-Event'] == 'pull_request':
+    if request.headers["X-Github-Event"] == "pull_request":
         repo = request.json["pull_request"]["base"]["repo"]["full_name"]
         clone = request.json["pull_request"]["head"]["repo"]["clone_url"]
-        sha = request.json["pull_request"]['head']['sha']
-        branch = request.json["pull_request"]['head']['ref']
+        sha = request.json["pull_request"]["head"]["sha"]
+        branch = request.json["pull_request"]["head"]["ref"]
 
-        _p('Queuing unit tests for %s %s' % (clone, branch))
+        _p("Queuing unit tests for %s %s" % (clone, branch))
 
         info = dict(
             repo=repo,
             sha=sha,
             branch=branch,
             clone=clone,
-            test_run_id=test_count)
+            test_run_id=test_count,
+        )
 
         # Lets immediately set something on the PR so that people looking at
         # the PR see that the service is aware of it.
-        _create_status(info["repo"], info['sha'], 'pending',
-                       'CI requested, #waiting = %d' % req_q.qsize(),
-                       'CI permissions')
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "pending",
+            "CI requested, #waiting = %d" % req_q.qsize(),
+            "CI permissions",
+        )
         req_q.put(info)
 
         test_count += 1
     else:
         _p("Got an unexpected header from github")
         for k, v in request.headers.items():
-            _p('%s:%s' % (str(k), str(v)))
+            _p("%s:%s" % (str(k), str(v)))
         pp.pprint(request.json)
         sys.stdout.flush()
 

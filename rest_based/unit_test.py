@@ -32,15 +32,15 @@ def _lcall(command, job_id):
     """
 
     # Write output to a file so we can see what's going on while it's running
-    f = '/tmp/%s.out' % job_id
+    f = "/tmp/%s.out" % job_id
 
-    with open(f, 'w', buffering=1) as log:  # Max buffer 1 line (text mode)
+    with open(f, "w", buffering=1) as log:  # Max buffer 1 line (text mode)
         exit_value = call(command, stdout=log, stderr=log)
     return exit_value, f
 
 
 def _file_name(job_id):
-    base = '%s/%s' % (config["LOGDIR"], job_id)
+    base = "%s/%s" % (config["LOGDIR"], job_id)
     return base + ".out"
 
 
@@ -54,13 +54,13 @@ def _run_command(job_id, args):
     log = _file_name(job_id)
 
     # Read in output file in it's entirety
-    with open(output_file, 'r') as o:
+    with open(output_file, "r") as o:
         out = o.read()
 
     # Delete file to prevent /tmp from filling up
     os.remove(output_file)
 
-    with open(log, 'w') as error_file:
+    with open(log, "w") as error_file:
         error_file.write(yaml.dump(dict(EC=str(ec), OUTPUT=out)))
         error_file.flush()
 
@@ -69,13 +69,13 @@ def _run_command(job_id, args):
 
 
 def _rs(length):
-    return ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
 
 
 def _load_config():
     global config
     cfg = os.path.dirname(os.path.realpath(__file__)) + "/" + "config.yaml"
-    with open(cfg, 'r') as array_data:
+    with open(cfg, "r") as array_data:
         config = yaml.safe_load(array_data.read())
 
 
@@ -91,25 +91,29 @@ def _update_state(job_id):
     job = jobs[job_id]
 
     # See if the process has ended
-    p = job['PROCESS']
+    p = job["PROCESS"]
     p.join(0)
     if not p.is_alive():
-        print('%s exited with %s ' % (p.name, str(p.exitcode)))
+        print("%s exited with %s " % (p.name, str(p.exitcode)))
         sys.stdout.flush()
 
         if p.exitcode == 0:
-            job['STATUS'] = 'SUCCESS'
+            job["STATUS"] = "SUCCESS"
         else:
-            job['STATUS'] = 'FAIL'
+            job["STATUS"] = "FAIL"
 
 
 def _return_state(job_id, only_running=False):
     _update_state(job_id)
     job = jobs[job_id]
 
-    if not only_running or (only_running and job["STATUS"] == 'RUNNING'):
-        return {"STATUS": job["STATUS"], "ID": job['ID'],
-                "JOB_ID": job_id, "PLUGIN": job['PLUGIN']}
+    if not only_running or (only_running and job["STATUS"] == "RUNNING"):
+        return {
+            "STATUS": job["STATUS"],
+            "ID": job["ID"],
+            "JOB_ID": job_id,
+            "PLUGIN": job["PLUGIN"],
+        }
     return None
 
 
@@ -126,22 +130,22 @@ def _only_running():
 
 
 # Returns systems available for running tests
-@route('/arrays')
+@route("/arrays")
 @auth_basic(_check)
 def arrays():
-    response.content_type = 'application/json'
-    return json.dumps([(x['ID'], x['PLUGIN']) for x in config['ARRAYS']])
+    response.content_type = "application/json"
+    return json.dumps([(x["ID"], x["PLUGIN"]) for x in config["ARRAYS"]])
 
 
 # Returns all tests that are still running
 # returns JSON array
 # [ {"STATUS": ['RUNNING'|'SUCCESS'|'FAIL'}, "ID": <array id>,
 # "JOB_ID": [a-z]{32}, "PLUGIN":'lsm plugin'}, ... ]
-@route('/running')
+@route("/running")
 @auth_basic(_check)
 def running():
     rc = _only_running()
-    response.content_type = 'application/json'
+    response.content_type = "application/json"
     return json.dumps(rc)
 
 
@@ -149,13 +153,13 @@ def running():
 # returns JSON array
 # [ {"STATUS": ['RUNNING'|'SUCCESS'|'FAIL'}, "ID": <array id>,
 # "JOB_ID": [a-z]{32}, "PLUGIN":'lsm plugin'}, ... ]
-@route('/test')
+@route("/test")
 @auth_basic(_check)
 def all_tests():
     rc = []
     for k in jobs.keys():
         rc.append(_return_state(k))
-    response.content_type = 'application/json'
+    response.content_type = "application/json"
     return json.dumps(rc)
 
 
@@ -165,23 +169,28 @@ def all_tests():
 # 412 - Job already running on specified array
 # 400 - Input parameters are incorrect or missing
 # 201 - Test started
-@route('/test', method='POST')
+@route("/test", method="POST")
 @auth_basic(_check)
 def test():
     global jobs
     req = request.json
 
-    if req and 'REPO' in req and 'BRANCH' in req and 'ID' in req and \
-            any([x for x in config['ARRAYS'] if x['ID'] == req['ID']]):
+    if (
+        req
+        and "REPO" in req
+        and "BRANCH" in req
+        and "ID" in req
+        and any([x for x in config["ARRAYS"] if x["ID"] == req["ID"]])
+    ):
 
         # Add a check to make sure we aren't already _running_ a job for this
         # array
         for k, v in jobs.items():
-            if v['ID'] == req['ID']:
+            if v["ID"] == req["ID"]:
                 # Update status to make sure
                 _update_state(k)
-                if v['STATUS'] == 'RUNNING':
-                    response.status = 412   # Precondition fail
+                if v["STATUS"] == "RUNNING":
+                    response.status = 412  # Precondition fail
                     return
 
         # Run the job
@@ -190,24 +199,23 @@ def test():
         password = ""
         plug = ""
 
-        for a in config['ARRAYS']:
-            if a['ID'] == req['ID']:
-                uri = a['URI']
-                password = a['PASSWORD']
-                plug = a['PLUGIN']
+        for a in config["ARRAYS"]:
+            if a["ID"] == req["ID"]:
+                uri = a["URI"]
+                password = a["PASSWORD"]
+                plug = a["PLUGIN"]
                 break
 
         # When we add rpm builds we will need client to pass which 'type' too
-        incoming = ('git', req['REPO'], req['BRANCH'], uri, password)
+        incoming = ("git", req["REPO"], req["BRANCH"], uri, password)
         job_id = _rs(32)
         p = Process(target=_run_command, args=(job_id, incoming))
         p.name = "|".join(incoming)
         p.start()
 
-        jobs[job_id] = dict(STATUS='RUNNING',
-                            PROCESS=p,
-                            ID=req['ID'],
-                            PLUGIN=plug)
+        jobs[job_id] = dict(
+            STATUS="RUNNING", PROCESS=p, ID=req["ID"], PLUGIN=plug
+        )
         response.status = 201
         return {"JOB_ID": job_id}
     else:
@@ -215,7 +223,7 @@ def test():
 
 
 # Get the status of the specified job
-@route('/test/<job_id>', method='GET')
+@route("/test/<job_id>", method="GET")
 @auth_basic(_check)
 def status(job_id):
     global jobs
@@ -228,14 +236,14 @@ def status(job_id):
 # log file from disk
 # @returns http status 200 on success, else 400 if job is still running or 404
 # if job is not found
-@route('/test/<job_id>', method='DELETE')
+@route("/test/<job_id>", method="DELETE")
 @auth_basic(_check)
 def test_del(job_id):
     global jobs
     if job_id in jobs:
         j = jobs[job_id]
 
-        if j['STATUS'] != "RUNNING":
+        if j["STATUS"] != "RUNNING":
             del jobs[job_id]
             _remove_file(job_id)
         else:
@@ -250,14 +258,14 @@ def test_del(job_id):
 # 400 if job is still running
 # 404 if job is not found
 # json payload { "EC": <exit code>, "OUTPUT": "std out + std error"}
-@route('/log/<job_id>')
+@route("/log/<job_id>")
 @auth_basic(_check)
 def cat_it(job_id):
     if job_id in jobs:
         j = jobs[job_id]
         log = _file_name(job_id)
-        if j['STATUS'] != "RUNNING":
-            with open(log, 'r') as foo:
+        if j["STATUS"] != "RUNNING":
+            with open(log, "r") as foo:
                 result = yaml.safe_load(foo.read())
             return json.dumps(result)
         else:
@@ -269,4 +277,4 @@ def cat_it(job_id):
 if __name__ == "__main__":
     # Load the available test arrays from config file
     _load_config()
-    run(host='localhost', port=8080)
+    run(host="localhost", port=8080)
