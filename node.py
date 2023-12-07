@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 """
 WARNING!  This file is auto updated from the node manager.  Any changes will
 be lost when the client disconnects and reconnects.
