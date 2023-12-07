@@ -613,6 +613,8 @@ class NodeManager(object):
     @staticmethod
     def _setup_listening(ip, port):
         bindsocket = socket.socket()
+        # So we can re-use the socket port if we shutdown, restart without waiting for port
+        # to be free again
         bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         bindsocket.bind((ip, port))
         bindsocket.listen(5)
