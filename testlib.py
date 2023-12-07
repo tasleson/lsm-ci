@@ -272,13 +272,12 @@ class TestNode(object):
                 if status != str(200):
                     raise IOError("Connection to proxy failed")
 
-            self.s = ssl.wrap_socket(
-                self.s,
-                ca_certs="server_cert.pem",
-                cert_reqs=ssl.CERT_REQUIRED,
-                certfile="client_cert.pem",
-                keyfile="client_key.pem",
-            )
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_REQUIRED
+            context.load_cert_chain("client_cert.pem", "client_key.pem")
+            context.load_verify_locations("server_cert.pem")
+            self.s = context.wrap_socket(self.s)
 
             if self.use_proxy:
                 self.s.do_handshake()
@@ -614,10 +613,20 @@ class NodeManager(object):
     @staticmethod
     def _setup_listening(ip, port):
         bindsocket = socket.socket()
+        # So we can re-use the socket port if we shut down, restart without waiting for port
+        # to be free again
         bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         bindsocket.bind((ip, port))
         bindsocket.listen(5)
-        return bindsocket
+
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.load_cert_chain("server_cert.pem", "server_key.pem")
+        context.load_verify_locations("client_cert.pem")
+
+        connection = context.wrap_socket(bindsocket, server_side=True)
+        return connection
 
     @staticmethod
     def _client_id(ip_address, arrays):
@@ -664,19 +673,11 @@ class NodeManager(object):
                     )
                 else:
                     for r in ready[0]:
-                        new_socket, from_addr = bindsocket.accept()
+                        connection, from_addr = bindsocket.accept()
 
                         # Set a fairly short timeout, so badly behaving clients
-                        # don't muck things up.
-                        new_socket.settimeout(1)
-                        connection = ssl.wrap_socket(
-                            new_socket,
-                            server_side=True,
-                            certfile="server_cert.pem",
-                            keyfile="server_key.pem",
-                            ca_certs="client_cert.pem",
-                            cert_reqs=ssl.CERT_REQUIRED,
-                        )
+                        # don't muck things up.	
+                        connection.settimeout(1)
 
                         # Make sure that if we trust the certificate chain
                         # that we are using the one signed that has the
@@ -703,7 +704,7 @@ class NodeManager(object):
                             )
                             continue
 
-                        # We have a well behaved client, increase timeouts
+                        # We have a well-behaved client, increase timeouts
                         nc.increase_tmo()
 
                         msg = "Accepted a connection from %s: arrays= %s" % (
