@@ -613,7 +613,7 @@ class NodeManager(object):
     @staticmethod
     def _setup_listening(ip, port):
         bindsocket = socket.socket()
-        # So we can re-use the socket port if we shutdown, restart without waiting for port
+        # So we can re-use the socket port if we shut down, restart without waiting for port
         # to be free again
         bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         bindsocket.bind((ip, port))
@@ -704,7 +704,7 @@ class NodeManager(object):
                             )
                             continue
 
-                        # We have a well behaved client, increase timeouts
+                        # We have a well-behaved client, increase timeouts
                         nc.increase_tmo()
 
                         msg = "Accepted a connection from %s: arrays= %s" % (
