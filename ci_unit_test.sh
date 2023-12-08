@@ -57,7 +57,14 @@ function good
 function run_test
 {
     good ./autogen.sh
-    good ./configure "$1"
+
+    if [ "CHK$(rpm -E %{?el7})" != "CHK" ];then
+        echo "EL7 does not have all dependencies in python3"
+        good ./configure "$1" --without-smispy --with-python2
+    else
+        good ./configure "$1"
+    fi
+
     good make
 
     # Source in the helpers functions that are included with the source tree
