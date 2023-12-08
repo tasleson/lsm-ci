@@ -7,8 +7,8 @@
 # build it and run the specified plugin with the supplied uri and password
 
 if [ "$#" -ne 5 ]; then
-	echo "syntax: ci_unit_test.sh [git|rpm] path/repo ver/branch <array uri> <array password>"
-	exit 1
+    echo "syntax: ci_unit_test.sh [git|rpm] path/repo ver/branch <array uri> <array password>"
+    exit 1
 fi
 
 what=$1
@@ -28,30 +28,28 @@ run_dir_rand="${run_dir}/$RANDOM"
 
 function cleanup
 {
-        if [ -e  "${base_dir}" ]
-        then
-		    echo "Deleting ${base_dir}"
-            rm -rf  "${base_dir}"
-        fi
+    if [ -d "${base_dir}" ]; then
+        echo "Deleting ${base_dir}"
+        rm -rf  "${base_dir}"
+    fi
 
-        if [ -e  "${run_dir_rand}" ]
-        then
-		    echo "Deleting ${run_dir_rand}"
-            rm -rf  "${run_dir_rand}"
-        fi
+    if [ -d  "${run_dir_rand}" ]; then
+        echo "Deleting ${run_dir_rand}"
+        rm -rf  "${run_dir_rand}"
+    fi
 }
 
 function good
 {
-	# test_include.sh has this function, but we need to run a number of
-	# commands before we can fetch the source to utilize it
-	echo "executing: $*"
+    # test_include.sh has this function, but we need to run a number of
+    # commands before we can fetch the source to utilize it
+    echo "executing: $*"
     eval "$@"
     local ec=$?
     if [ ${ec} -ne 0 ]; then
-		echo "Fail exit[${ec}]: $1"
-		exit 1
-	fi
+        echo "Fail exit[${ec}]: $1"
+        exit 1
+    fi
 }
 
 function run_test
@@ -97,10 +95,10 @@ good cd "${base_dir}"
 
 # Fetch the code or rpm, or make sure rpm version is installed
 if [ "${what}" = "git" ] ; then
-	good git clone "${loc}" --branch "${ver}"
+    good git clone "${loc}" --branch "${ver}"
 else
-	echo "Testing with RPMs not completed yet!"
-	exit 1
+    echo "Testing with RPMs not completed yet!"
+    exit 1
 fi
 
 good cd "${src_dir}"
