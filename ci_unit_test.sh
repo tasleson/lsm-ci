@@ -58,7 +58,7 @@ function run_test
 
     if [ "CHK$(rpm -E %{?el7})" != "CHK" ];then
         echo "EL7 does not have all dependencies in python3"
-        good ./configure "$1" --without-smispy --with-python2
+        good ./configure "$1" --with-python2
     else
         good ./configure "$1"
     fi
