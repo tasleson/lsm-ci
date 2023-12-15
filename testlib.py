@@ -272,13 +272,12 @@ class TestNode(object):
                 if status != str(200):
                     raise IOError("Connection to proxy failed")
 
-            self.s = ssl.wrap_socket(
-                self.s,
-                ca_certs="server_cert.pem",
-                cert_reqs=ssl.CERT_REQUIRED,
-                certfile="client_cert.pem",
-                keyfile="client_key.pem",
-            )
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_REQUIRED
+            context.load_cert_chain("client_cert.pem", "client_key.pem")
+            context.load_verify_locations("server_cert.pem")
+            self.s = context.wrap_socket(self.s)
 
             if self.use_proxy:
                 self.s.do_handshake()
@@ -669,14 +668,21 @@ class NodeManager(object):
                         # Set a fairly short timeout, so badly behaving clients
                         # don't muck things up.
                         new_socket.settimeout(1)
-                        connection = ssl.wrap_socket(
-                            new_socket,
-                            server_side=True,
-                            certfile="server_cert.pem",
-                            keyfile="server_key.pem",
-                            ca_certs="client_cert.pem",
-                            cert_reqs=ssl.CERT_REQUIRED,
-                        )
+                        # connection = ssl.wrap_socket(
+                        #     new_socket,
+                        #     server_side=True,
+                        #     certfile="server_cert.pem",
+                        #     keyfile="server_key.pem",
+                        #     ca_certs="client_cert.pem",
+                        #     cert_reqs=ssl.CERT_REQUIRED,
+                        # )
+                        context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                        context.verify_mode = ssl.CERT_REQUIRED
+                        context.load_verify_locations("client_cert.pem")
+                        context.load_cert_chain("server_cert.pem", "server_key.pem")
+                        connection = context.wrap_socket(new_socket, server_side=True,
+                                                        do_handshake_on_connect=True,
+                                                        suppress_ragged_eofs=True )
 
                         # Make sure that if we trust the certificate chain
                         # that we are using the one signed that has the
