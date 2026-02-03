@@ -62,30 +62,35 @@ def _lcall(command, job_id):
     return exit_value, f
 
 
-def _file_name(job_id):
+def _file_name(job_id, log_dir=None):
     # If this log directory is located in /tmp, the system may remove the
     # directory after a while, making us fail to log when needed.
-    log_dir = config["LOGDIR"]
+
+    if log_dir is None:
+        log_dir = config["LOGDIR"]
+
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
     base = "%s/%s" % (log_dir, job_id)
     return base + ".out"
 
-
-def _run_command(job_id, args):
+# Python 3.14 changed behavior where the child process does not inherit global variables by default
+# thus we are passing them instead.
+# see: https://github.com/python/cpython/issues/84559
+#      https://docs.python.org/3.14/whatsnew/3.14.html
+#      https://docs.python.org/3/library/multiprocessing.html
+def _run_command(job_id, args, program, log_dir):
     ec = 0
     cmd = []
-    log_dir = ""
 
     try:
-        cmd = [config["PROGRAM"]]
-        log_dir = config["LOGDIR"]
+        cmd = [program]
 
         cmd.extend(args)
 
         (ec, output_file) = _lcall(cmd, job_id)
-        log = _file_name(job_id)
+        log = _file_name(job_id, log_dir)
 
         # Read in output file in it's entirety
         with open(output_file, "r") as o:
@@ -100,7 +105,7 @@ def _run_command(job_id, args):
         os.remove(output_file)
     except Exception:
         testlib.p(
-            "job_id = %s cmd = '%s', log_dir = %s" % (job_id, str(cmd), log_dir)
+            "job_id = %s cmd = '%s', log_dir = %s, program = %s" % (job_id, str(cmd), log_dir, program)
         )
         testlib.p(str(traceback.format_exc()))
 
@@ -279,7 +284,7 @@ class Cmds(object):
             # which 'type' too
             incoming = ("git", repo, branch, uri, password)
             job_id = _rs(32)
-            p = Process(target=_run_command, args=(job_id, incoming))
+            p = Process(target=_run_command, args=(job_id, incoming, config["PROGRAM"], config["LOGDIR"]))
             p.name = "|".join(incoming)
             p.start()
 
