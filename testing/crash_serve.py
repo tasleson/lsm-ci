@@ -8,7 +8,6 @@ import os
 import requests
 import random
 
-
 PORT_NUM_CONTROL = int(os.getenv("PORT_NUM_CONTROL", "43301"))
 PORT_NUM_PEER_SSL = int(os.getenv("PORT_NUM_PEER_SSL", "443"))
 IP_ADDRESS = os.getenv("IP_ADDRESS", "127.0.0.1")

@@ -107,8 +107,7 @@ class Response(object):
         :return: JSON
         """
         return json.dumps(
-            dict(ec=self.ec, err_msg=self.err_msg, result=self.result)
-        )
+            dict(ec=self.ec, err_msg=self.err_msg, result=self.result))
 
     def __str__(self):
         return self.serialize()
@@ -160,7 +159,7 @@ class Transport(object):
         hdr = self._read_all(self.HDR_LEN)
         payload_len, signature = int(hdr[:10]), hdr[10:]
 
-        if payload_len > 2 ** 28:
+        if payload_len > 2**28:
             raise IOError("Payload len too large %d" % payload_len)
 
         payload = self._read_all(payload_len)
@@ -203,9 +202,8 @@ def p(msg):
     sys.stderr.flush()
     with print_lock:
         tid = ctypes.CDLL("libc.so.6").syscall(224)
-        ts = datetime.datetime.fromtimestamp(time.time()).strftime(
-            "%Y-%m-%d %H:%M:%S.%f"
-        )
+        ts = datetime.datetime.fromtimestamp(
+            time.time()).strftime("%Y-%m-%d %H:%M:%S.%f")
         print("%s: %d:%d- %s" % (ts, os.getpid(), tid, msg))
         sys.stdout.flush()
 
@@ -272,10 +270,9 @@ class TestNode(object):
                 if status != str(200):
                     raise IOError("Connection to proxy failed")
 
-
             context = ssl.create_default_context(
-                    ssl.Purpose.SERVER_AUTH,
-                    cafile="ca.pem",
+                ssl.Purpose.SERVER_AUTH,
+                cafile="ca.pem",
             )
 
             context.load_cert_chain(
@@ -374,10 +371,8 @@ class Node(object):
         """
         if self._state != value:
             if value == Node.UNUSABLE:
-                p(
-                    "Node %s:%d now unavailable!"
-                    % (self.client_ip, self.client_port)
-                )
+                p("Node %s:%d now unavailable!" %
+                  (self.client_ip, self.client_port))
         self._state = value
 
     def close(self):
@@ -486,16 +481,14 @@ class Node(object):
         :return: Result output
         """
         with self.lock:
-            resp = self._rpc("job_completion", (job_id,))
+            resp = self._rpc("job_completion", (job_id, ))
             if resp and resp.ec == 200:
                 output = json.loads(resp.result)["OUTPUT"]
                 return output
 
             if resp:
-                p(
-                    "Error: job_completion id = %s resp = %s"
-                    % (job_id, str(resp))
-                )
+                p("Error: job_completion id = %s resp = %s" %
+                  (job_id, str(resp)))
             else:
                 p("Error: job_completion, no response!")
             return None
@@ -507,12 +500,10 @@ class Node(object):
         :return: None
         """
         with self.lock:
-            resp = self._rpc("job_delete", (job_id,))
+            resp = self._rpc("job_delete", (job_id, ))
             if resp and resp.ec != 200:
-                p(
-                    "Error: Unable to delete job id = %s resp = %s"
-                    % (job_id, str(resp))
-                )
+                p("Error: Unable to delete job id = %s resp = %s" %
+                  (job_id, str(resp)))
             else:
                 p("Job %s deleted!" % job_id)
 
@@ -539,7 +530,7 @@ class Node(object):
         :return: Array of file signatures.
         """
         with self.lock:
-            resp = self._rpc("md5_files", (file_list,))
+            resp = self._rpc("md5_files", (file_list, ))
             if resp and resp.ec == 200:
                 return resp.result
             else:
@@ -560,7 +551,7 @@ class Node(object):
             md5_sum, data = file_md5_and_data(fn)
             pushed_files.append(dict(fn=f, md5=md5_sum, data=data))
 
-        resp = self._rpc("update_files", (pushed_files,))
+        resp = self._rpc("update_files", (pushed_files, ))
         if resp and resp.ec == 200:
             return True
 
@@ -603,7 +594,7 @@ class NodeManager(object):
         thread = threading.Thread(
             target=NodeManager.main_event_loop,
             name="Node Manager",
-            args=(self,),
+            args=(self, ),
         )
         thread.start()
 
@@ -635,7 +626,7 @@ class NodeManager(object):
 
     @staticmethod
     def _setup_server_tls_context():
-         # Setup SSL context
+        # Setup SSL context
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
 
         context.load_cert_chain(
@@ -662,19 +653,16 @@ class NodeManager(object):
         # Setup the listening socket
         bindsocket = None
         try:
-            bindsocket = NodeManager._setup_listening(
-                node_mgr.ip, node_mgr.port
-            )
+            bindsocket = NodeManager._setup_listening(node_mgr.ip,
+                                                      node_mgr.port)
         except:
             p(str(traceback.format_exc()))
-            p(
-                "Unable to setup listening socket (%s:%d), shutting down"
-                % (node_mgr.ip, node_mgr.port)
-            )
+            p("Unable to setup listening socket (%s:%d), shutting down" %
+              (node_mgr.ip, node_mgr.port))
             RUN.value = 0
             os.kill(os.getpid(), signal.SIGINT)
 
-        context = NodeManager._setup_server_tls_context();
+        context = NodeManager._setup_server_tls_context()
 
         while RUN.value:
 
@@ -690,14 +678,14 @@ class NodeManager(object):
                     p("Error on listening socket, re-creating...")
                     _try_close(bindsocket)
                     bindsocket = NodeManager._setup_listening(
-                        node_mgr.ip, node_mgr.port
-                    )
+                        node_mgr.ip, node_mgr.port)
                 else:
                     for r in ready[0]:
                         new_socket, from_addr = bindsocket.accept()
 
-                         # Wrap the socket
-                        connection = context.wrap_socket(new_socket, server_side=True)
+                        # Wrap the socket
+                        connection = context.wrap_socket(new_socket,
+                                                         server_side=True)
 
                         # TODO: add certificate pinning
 
@@ -709,10 +697,8 @@ class NodeManager(object):
                         arrays = nc.arrays()
                         if arrays is None:
                             nc.close()
-                            p(
-                                "Node has no configured arrays, rejecting %s"
-                                % str(from_addr)
-                            )
+                            p("Node has no configured arrays, rejecting %s" %
+                              str(from_addr))
                             continue
 
                         # We have a well-behaved client, increase timeouts
@@ -723,7 +709,8 @@ class NodeManager(object):
                             str(arrays),
                         )
 
-                        client_id = NodeManager._client_id(from_addr[0], arrays)
+                        client_id = NodeManager._client_id(
+                            from_addr[0], arrays)
 
                         # If we already had this client, close previous and
                         # update with new.  We are expecting only one
@@ -737,10 +724,8 @@ class NodeManager(object):
                                 p("%s: previously known %s" % (msg, client_id))
                                 node_mgr.known_clients[client_id].replace(nc)
                             else:
-                                p(
-                                    "%s: new client connection %s"
-                                    % (msg, client_id)
-                                )
+                                p("%s: new client connection %s" %
+                                  (msg, client_id))
                                 node_mgr.known_clients[client_id] = nc
 
                         NodeManager.check_for_updates(nc)
@@ -765,10 +750,8 @@ class NodeManager(object):
                 # connect
                 _try_close(connection)
                 _try_close(new_socket)
-                p(
-                    "SSL error: Rejecting %s for %s"
-                    % (str(from_addr), str(ssle))
-                )
+                p("SSL error: Rejecting %s for %s" %
+                  (str(from_addr), str(ssle)))
             except:
                 p(str(traceback.format_exc()))
                 _try_close(connection)
@@ -799,19 +782,15 @@ class NodeManager(object):
                 p("Updating client!")
                 for i, fn in enumerate(files):
                     if local_signatures[i] != remote_signatures[i]:
-                        p(
-                            "File %s local= %s remote= %s"
-                            % (fn, local_signatures[i], remote_signatures[i])
-                        )
+                        p("File %s local= %s remote= %s" %
+                          (fn, local_signatures[i], remote_signatures[i]))
 
                 if node.update_files(files):
                     remote_signatures = node.get_file_md5(files)
                     if local_signatures == remote_signatures:
                         node.restart()
                     else:
-                        p(
-                            "After updating files we have a md5 miss-match,"
-                            " not restarting client!"
-                        )
+                        p("After updating files we have a md5 miss-match,"
+                          " not restarting client!")
             else:
                 p("Client is current!")

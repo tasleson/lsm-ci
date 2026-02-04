@@ -31,7 +31,6 @@ TOKEN = os.getenv("GIT_TOKEN", "")
 # this service.
 GIT_SECRET = os.getenv("GIT_SECRET", "")
 
-
 # Credentials to talk to test service
 # TODO Place in yaml config file so that we can add services by editing text
 #      file and adding entries
@@ -56,10 +55,8 @@ def _request_with_retries(url):
             r = requests.get(url, auth=(SNIA_USER, SNIA_TOKEN))
             return r
         except requests.ConnectionError as ce:
-            _p(
-                "ConnectionError to (GET) %s : message(%s)"
-                % (SNIA_URL, str(ce))
-            )
+            _p("ConnectionError to (GET) %s : message(%s)" %
+               (SNIA_URL, str(ce)))
             _p("Trying again in 1 second")
             time.sleep(1)
 
@@ -70,10 +67,8 @@ def _post_with_retries(url, data, auth):
             r = requests.post(url, auth=auth, json=data)
             return r
         except requests.ConnectionError as ce:
-            _p(
-                "ConnectionError to (post) %s : message(%s)"
-                % (SNIA_URL, str(ce))
-            )
+            _p("ConnectionError to (post) %s : message(%s)" %
+               (SNIA_URL, str(ce)))
             _p("Trying again in 1 second")
             time.sleep(1)
 
@@ -100,9 +95,8 @@ def _print_error(req, msg):
 
 def _array_start(clone_url, branch, array_id):
     data = {"REPO": clone_url, "BRANCH": branch, "ID": array_id}
-    r = _post_with_retries(
-        SNIA_URL + "/" + "test", data, (SNIA_USER, SNIA_TOKEN)
-    )
+    r = _post_with_retries(SNIA_URL + "/" + "test", data,
+                           (SNIA_USER, SNIA_TOKEN))
 
     if r.status_code != 201:
         _print_error(r, "Unexpected error on starting test")
@@ -184,12 +178,10 @@ def _run_tests(info):
             info["repo"],
             info["sha"],
             "pending",
-            "Plugin = %s started @ %s"
-            % (
+            "Plugin = %s started @ %s" % (
                 a[1],
-                datetime.datetime.fromtimestamp(time.time()).strftime(
-                    "%m/%d %H:%M:%S"
-                ),
+                datetime.datetime.fromtimestamp(
+                    time.time()).strftime("%m/%d %H:%M:%S"),
             ),
             a[0],
         )
@@ -321,9 +313,8 @@ def _clean_process_list():
 
 
 def _p(msg):
-    ts = datetime.datetime.fromtimestamp(time.time()).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    ts = datetime.datetime.fromtimestamp(
+        time.time()).strftime("%Y-%m-%d %H:%M:%S")
     print("%s:%d:%s" % (ts, os.getpid(), msg))
     sys.stdout.flush()
 
@@ -339,9 +330,8 @@ def e_handler():
     global processes
 
     # Check secret before we do anything
-    if not _verify_signature(
-        request.body.read(), request.headers["X-Hub-Signature"]
-    ):
+    if not _verify_signature(request.body.read(),
+                             request.headers["X-Hub-Signature"]):
         response.status = 500
         return
 
@@ -364,7 +354,7 @@ def e_handler():
         info = dict(repo=repo, sha=sha, branch=branch, clone=clone)
 
         # Lets update the status
-        p = Process(target=_run_tests, args=(info,))
+        p = Process(target=_run_tests, args=(info, ))
         p.start()
         processes.append(p)
 

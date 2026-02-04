@@ -15,7 +15,6 @@ import sys
 from subprocess import call
 from multiprocessing import Process
 
-
 jobs = {}
 config = {}
 
@@ -69,7 +68,8 @@ def _run_command(job_id, args):
 
 
 def _rs(length):
-    return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
+    return "".join(
+        random.choice(string.ascii_lowercase) for _ in range(length))
 
 
 def _load_config():
@@ -175,13 +175,8 @@ def test():
     global jobs
     req = request.json
 
-    if (
-        req
-        and "REPO" in req
-        and "BRANCH" in req
-        and "ID" in req
-        and any([x for x in config["ARRAYS"] if x["ID"] == req["ID"]])
-    ):
+    if (req and "REPO" in req and "BRANCH" in req and "ID" in req
+            and any([x for x in config["ARRAYS"] if x["ID"] == req["ID"]])):
 
         # Add a check to make sure we aren't already _running_ a job for this
         # array
@@ -213,9 +208,10 @@ def test():
         p.name = "|".join(incoming)
         p.start()
 
-        jobs[job_id] = dict(
-            STATUS="RUNNING", PROCESS=p, ID=req["ID"], PLUGIN=plug
-        )
+        jobs[job_id] = dict(STATUS="RUNNING",
+                            PROCESS=p,
+                            ID=req["ID"],
+                            PLUGIN=plug)
         response.status = 201
         return {"JOB_ID": job_id}
     else:

@@ -75,6 +75,7 @@ def _file_name(job_id, log_dir=None):
     base = "%s/%s" % (log_dir, job_id)
     return base + ".out"
 
+
 # Python 3.14 changed behavior where the child process does not inherit global variables by default
 # thus we are passing them instead.
 # see: https://github.com/python/cpython/issues/84559
@@ -104,9 +105,8 @@ def _run_command(job_id, args, program, log_dir):
         # written out error file, in case we hit a bug
         os.remove(output_file)
     except Exception:
-        testlib.p(
-            "job_id = %s cmd = '%s', log_dir = %s, program = %s" % (job_id, str(cmd), log_dir, program)
-        )
+        testlib.p("job_id = %s cmd = '%s', log_dir = %s, program = %s" %
+                  (job_id, str(cmd), log_dir, program))
         testlib.p(str(traceback.format_exc()))
 
     # This is a separate process, lets exit with the same exit code as cmd
@@ -114,7 +114,8 @@ def _run_command(job_id, args, program, log_dir):
 
 
 def _rs(length):
-    return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
+    return "".join(
+        random.choice(string.ascii_lowercase) for _ in range(length))
 
 
 def _load_config():
@@ -126,26 +127,18 @@ def _load_config():
     # If the user didn't specify a full path in the configuration file we
     # expect it in the same directory as this file
     if config["PROGRAM"][0] != "/":
-        config["PROGRAM"] = (
-            os.path.dirname(os.path.realpath(__file__))
-            + "/"
-            + config["PROGRAM"]
-        )
+        config["PROGRAM"] = (os.path.dirname(os.path.realpath(__file__)) +
+                             "/" + config["PROGRAM"])
 
     # Lets make sure import external files/directories are present
     if not os.path.exists(config["PROGRAM"]):
         testlib.p("config PROGRAM %s does not exist" % config["PROGRAM"])
         sys.exit(1)
 
-    if not (
-        os.path.exists(config["LOGDIR"])
-        and os.path.isdir(config["LOGDIR"])
-        and os.access(config["LOGDIR"], os.W_OK)
-    ):
-        testlib.p(
-            "config LOGDIR not preset or not a "
-            "directory %s or not writeable" % (config["LOGDIR"])
-        )
+    if not (os.path.exists(config["LOGDIR"]) and os.path.isdir(
+            config["LOGDIR"]) and os.access(config["LOGDIR"], os.W_OK)):
+        testlib.p("config LOGDIR not preset or not a "
+                  "directory %s or not writeable" % (config["LOGDIR"]))
         sys.exit(1)
 
 
@@ -284,13 +277,16 @@ class Cmds(object):
             # which 'type' too
             incoming = ("git", repo, branch, uri, password)
             job_id = _rs(32)
-            p = Process(target=_run_command, args=(job_id, incoming, config["PROGRAM"], config["LOGDIR"]))
+            p = Process(target=_run_command,
+                        args=(job_id, incoming, config["PROGRAM"],
+                              config["LOGDIR"]))
             p.name = "|".join(incoming)
             p.start()
 
-            jobs[job_id] = dict(
-                STATUS="RUNNING", PROCESS=p, ID=array_id, PLUGIN=plug
-            )
+            jobs[job_id] = dict(STATUS="RUNNING",
+                                PROCESS=p,
+                                ID=array_id,
+                                PLUGIN=plug)
             return job_id, 201, ""
         else:
             return "", 400, "Invalid array specified!"
@@ -401,9 +397,8 @@ class Cmds(object):
                     "File %s contains illegal character" % file_name,
                 )
 
-            full_fn = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)), file_name
-            )
+            full_fn = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                   file_name)
             if os.path.exists(full_fn) and os.path.isfile(full_fn):
                 rc.append(testlib.file_md5(full_fn))
             else:
@@ -441,8 +436,7 @@ class Cmds(object):
             perms = None
             name = os.path.basename(src_path_name)
             dest_path_name = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)), name
-            )
+                os.path.dirname(os.path.realpath(__file__)), name)
 
             # Before we move, lets store off the perms, so we can restore them
             # after the move
@@ -453,7 +447,8 @@ class Cmds(object):
             shutil.move(src_path_name, dest_path_name)
 
             if perms:
-                testlib.p("Setting perms: %s %s" % (dest_path_name, oct(perms)))
+                testlib.p("Setting perms: %s %s" %
+                          (dest_path_name, oct(perms)))
                 os.chmod(dest_path_name, perms)
 
         return "", 200, ""

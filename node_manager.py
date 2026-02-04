@@ -59,8 +59,8 @@ TRUSTED_REPO_FN = os.getenv("TRUSTED_REPOS", "")
 # Full path to trusted file on repo itself
 TRUSTED_REPO_REMOTE = os.getenv(
     "TRUSTED_REPOS_REMOTE",
-    "https://raw.githubusercontent.com/"
-    + "libstorage/libstoragemgmt/master/test/trusted.yaml",
+    "https://raw.githubusercontent.com/" +
+    "libstorage/libstoragemgmt/master/test/trusted.yaml",
 )
 
 # When we test locally we don't want to try and set status on github.
@@ -94,10 +94,8 @@ def _post_with_retries(url, data, auth):
 
 def _print_error(req, msg):
     formatted_json = pp.pformat(req.json())
-    _p(
-        "%s status code = %d, \nJSON: \n%s\n"
-        % (msg, req.status_code, formatted_json)
-    )
+    _p("%s status code = %d, \nJSON: \n%s\n" %
+       (msg, req.status_code, formatted_json))
 
 
 def _log_write(node, job_id):
@@ -153,8 +151,8 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
         else:
             _print_error(
                 r,
-                "Unexpected error on setting status url=%s data=%s "
-                % (str(url), str(data)),
+                "Unexpected error on setting status url=%s data=%s " %
+                (str(url), str(data)),
             )
     else:
         _p("NOT POSTED: updated status url=%s data=%s" % (str(url), str(data)))
@@ -182,8 +180,7 @@ def trusted_repo(info):
             trusted = yaml.safe_load(result.text)
         else:
             if os.path.exists(TRUSTED_REPO_FN) and os.path.isfile(
-                TRUSTED_REPO_FN
-            ):
+                    TRUSTED_REPO_FN):
                 with open(TRUSTED_REPO_FN, "r") as tdata:
                     trusted = yaml.safe_load(tdata.read())
 
@@ -260,12 +257,10 @@ def run_tests(info):
                 info["repo"],
                 info["sha"],
                 "pending",
-                "Plugin = %s started @ %s"
-                % (
+                "Plugin = %s started @ %s" % (
                     a[1],
-                    datetime.datetime.fromtimestamp(time.time()).strftime(
-                        "%m/%d %H:%M:%S"
-                    ),
+                    datetime.datetime.fromtimestamp(
+                        time.time()).strftime("%m/%d %H:%M:%S"),
                 ),
                 a[0],
             )
@@ -467,10 +462,8 @@ def rerun_test(test_id):
             # Try to make the test counts unique
             cpy = copy.deepcopy(i)
 
-            _p(
-                "Re-running test: client IP %s: %s %s"
-                % (request.remote_addr, str(test_id), str(cpy))
-            )
+            _p("Re-running test: client IP %s: %s %s" %
+               (request.remote_addr, str(test_id), str(cpy)))
 
             cpy["test_run_id"] = test_count
             test_count += 1
@@ -557,9 +550,8 @@ def e_handler():
     global test_count
 
     # Check secret before we do *anything*
-    if not _verify_signature(
-        request.body.read(), request.headers["X-Hub-Signature"]
-    ):
+    if not _verify_signature(request.body.read(),
+                             request.headers["X-Hub-Signature"]):
         response.status = 500
         return
 

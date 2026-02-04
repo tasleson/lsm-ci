@@ -20,7 +20,8 @@ def gen_signature(data):
     :param data: Data to generate signature for
     :return: "sha1=<hexdigest>"
     """
-    h = hmac.new(GIT_SECRET.encode("utf-8"), data.encode("utf-8"), hashlib.sha1)
+    h = hmac.new(GIT_SECRET.encode("utf-8"), data.encode("utf-8"),
+                 hashlib.sha1)
     s = "sha1=" + h.hexdigest()
     return s.encode("utf-8")
 
@@ -60,8 +61,7 @@ if __name__ == "__main__":
     body["pull_request"]["head"]["repo"] = dict()
 
     body["pull_request"]["base"]["repo"][
-        "full_name"
-    ] = "libstorage/libstoragemgmt"
+        "full_name"] = "libstorage/libstoragemgmt"
 
     body["pull_request"]["head"]["repo"]["clone_url"] = args.clone_url
     body["pull_request"]["head"]["sha"] = args.sha1
@@ -71,8 +71,8 @@ if __name__ == "__main__":
 
     head["X-Hub-Signature"] = gen_signature(body_json)
 
-    response = requests.post(
-        url=url, headers=head, data=body_json.encode("utf-8")
-    )
+    response = requests.post(url=url,
+                             headers=head,
+                             data=body_json.encode("utf-8"))
 
     print("status = %d" % int(response.status_code))
