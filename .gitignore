@@ -1,3 +1,7 @@
 *.pyc
 *.pem
 start_node_manager.sh
+*.crt
+*.key
+*.csr
+*.srl
