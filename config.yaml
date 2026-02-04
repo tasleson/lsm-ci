@@ -7,7 +7,7 @@ ARRAYS:
 LOGDIR: /tmp/unit
 
 # What is being executed 
-PROGRAM: <some program>
+PROGRAM: some_test.sh
 
 # Server and port
 SERVER_IP: 'localhost'

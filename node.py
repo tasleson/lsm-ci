@@ -32,7 +32,6 @@ import yaml
 import os
 import json
 import sys
-import pickle
 from subprocess import call
 from multiprocessing import Process
 import testlib
@@ -52,13 +51,15 @@ NODE = None
 def _lcall(command, job_id):
     """
     Call an executable and return a tuple of exitcode, stdout&stderr
+    Note: command must be a list (not a string) to prevent shell injection
     """
 
     # Write output to a file so we can see what's going on while it's running
     f = "/tmp/%s.out" % job_id
 
     with open(f, "w", buffering=1) as log:  # Max buffer 1 line (text mode)
-        exit_value = call(command, stdout=log, stderr=log)
+        # shell=False is the default, ensuring no shell interpretation
+        exit_value = call(command, stdout=log, stderr=log, shell=False)
     return exit_value, f
 
 
@@ -97,8 +98,8 @@ def _run_command(job_id, args, program, log_dir):
         with open(output_file, "r") as o:
             out = o.read()
 
-        with open(log, "wb") as error_file:
-            pickle.dump(dict(EC=str(1), OUTPUT=out), error_file)
+        with open(log, "w") as error_file:
+            json.dump(dict(EC=str(ec), OUTPUT=out), error_file)
             error_file.flush()
 
         # Delete file to prevent /tmp from filling up, but after we have
@@ -201,6 +202,40 @@ class Cmds(object):
     """
 
     @staticmethod
+    def _validate_repo_url(repo):
+        """
+        Validate that the repo URL is a safe git URL.
+        :param repo: Repository URL to validate
+        :return: True if valid, False otherwise
+        """
+        import re
+        # Allow https and git protocols with standard git URL format
+        # This prevents command injection through malicious URLs
+        git_url_pattern = r'^(https?|git)://[a-zA-Z0-9\-._~:/?#\[\]@!$&\'()*+,;=%]+\.git$'
+        if not re.match(git_url_pattern, repo):
+            return False
+        # Additional check: no shell metacharacters
+        dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '\n', '\r']
+        return not any(char in repo for char in dangerous_chars)
+
+    @staticmethod
+    def _validate_branch_name(branch):
+        """
+        Validate that the branch name is safe.
+        :param branch: Branch name to validate
+        :return: True if valid, False otherwise
+        """
+        import re
+        # Git branch names: alphanumeric, hyphens, underscores, slashes, dots
+        # No shell metacharacters allowed
+        branch_pattern = r'^[a-zA-Z0-9/_.\-]+$'
+        if not re.match(branch_pattern, branch):
+            return False
+        # Additional safety: no dangerous patterns
+        dangerous_patterns = ['..', '//', '\\']
+        return not any(pattern in branch for pattern in dangerous_patterns)
+
+    @staticmethod
     def ping():
         """
         Used to see if the node manager can talk to the node.
@@ -246,6 +281,15 @@ class Cmds(object):
             201 - Test started
         """
         global jobs
+
+        # Validate inputs to prevent command injection
+        if not Cmds._validate_repo_url(repo):
+            testlib.p("Invalid repo URL rejected: %s" % repo)
+            return "", 400, "Invalid repository URL format"
+
+        if not Cmds._validate_branch_name(branch):
+            testlib.p("Invalid branch name rejected: %s" % branch)
+            return "", 400, "Invalid branch name format"
 
         testlib.p("Running test for %s %s %s" % (repo, branch, array_id))
 
@@ -332,8 +376,8 @@ class Cmds(object):
             if j["STATUS"] != "RUNNING":
                 try:
                     testlib.p("Retrieving log file: %s" % log)
-                    with open(log, "rb") as foo:
-                        result = pickle.load(foo)
+                    with open(log, "r") as foo:
+                        result = json.load(foo)
 
                     return json.dumps(result), 200, ""
                 except:

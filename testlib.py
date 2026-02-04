@@ -280,13 +280,11 @@ class TestNode(object):
                 keyfile="client.key",
             )
 
-            # Enforce hostname verification if we're connecting to production
-            # node manager
+            # Always enforce hostname verification for security
+            # NOTE: For local testing, ensure certificates have correct hostnames
             p("server ip = %s" % self.server_ip)
-            if "ci.asleson.org" not in self.server_ip:
-                context.check_hostname = False
 
-            self.s = context.wrap_socket(self.s)
+            self.s = context.wrap_socket(self.s, server_hostname="ci.asleson.org")
 
             if self.use_proxy:
                 self.s.do_handshake()
