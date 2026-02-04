@@ -272,11 +272,23 @@ class TestNode(object):
                 if status != str(200):
                     raise IOError("Connection to proxy failed")
 
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_REQUIRED
-            context.load_cert_chain("client_cert.pem", "client_key.pem")
-            context.load_verify_locations("server_cert.pem")
+
+            context = ssl.create_default_context(
+                    ssl.Purpose.SERVER_AUTH,
+                    cafile="ca.pem",
+            )
+
+            context.load_cert_chain(
+                certfile="client.crt",
+                keyfile="client.key",
+            )
+
+            # Enforce hostname verification if we're connecting to production
+            # node manager
+            p("server ip = %s" % self.server_ip)
+            if "ci.asleson.org" not in self.server_ip:
+                context.check_hostname = False
+
             self.s = context.wrap_socket(self.s)
 
             if self.use_proxy:
@@ -619,14 +631,21 @@ class NodeManager(object):
         bindsocket.bind((ip, port))
         bindsocket.listen(5)
 
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_REQUIRED
-        context.load_cert_chain("server_cert.pem", "server_key.pem")
-        context.load_verify_locations("client_cert.pem")
+        return bindsocket
 
-        connection = context.wrap_socket(bindsocket, server_side=True)
-        return connection
+    @staticmethod
+    def _setup_server_tls_context():
+         # Setup SSL context
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+
+        context.load_cert_chain(
+            certfile="server.crt",
+            keyfile="server.key",
+        )
+
+        context.load_verify_locations(cafile="ca.pem")
+        context.verify_mode = ssl.CERT_REQUIRED
+        return context
 
     @staticmethod
     def _client_id(ip_address, arrays):
@@ -655,6 +674,8 @@ class NodeManager(object):
             RUN.value = 0
             os.kill(os.getpid(), signal.SIGINT)
 
+        context = NodeManager._setup_server_tls_context();
+
         while RUN.value:
 
             new_socket = None
@@ -673,26 +694,16 @@ class NodeManager(object):
                     )
                 else:
                     for r in ready[0]:
-                        connection, from_addr = bindsocket.accept()
+                        new_socket, from_addr = bindsocket.accept()
+
+                         # Wrap the socket
+                        connection = context.wrap_socket(new_socket, server_side=True)
+
+                        # TODO: add certificate pinning
 
                         # Set a fairly short timeout, so badly behaving clients
-                        # don't muck things up.	
+                        # don't muck things up.
                         connection.settimeout(1)
-
-                        # Make sure that if we trust the certificate chain
-                        # that we are using the one signed that has the
-                        # expected serial number.
-                        peer_cert = connection.getpeercert()
-                        if (
-                            peer_cert is None
-                            or peer_cert["serialNumber"] != "B442051E67AA6DBF"
-                        ):
-                            _try_close(new_socket)
-                            p(
-                                "Non-matching SN: rejecting %s (%s)"
-                                % (str(from_addr), str(peer_cert))
-                            )
-                            continue
 
                         nc = Node(connection, from_addr)
                         arrays = nc.arrays()
@@ -742,10 +753,17 @@ class NodeManager(object):
 
             except KeyboardInterrupt:
                 _try_close(bindsocket)
+                _try_close(connection)
+                _try_close(new_socket)
                 sys.exit(1)
+            except BrokenPipeError as e:
+                _try_close(connection)
+                _try_close(new_socket)
+                p("%s - %s" % (str(e), str(from_addr)))
             except ssl.SSLError as ssle:
                 # We get these errors when someone port scan and tries to
                 # connect
+                _try_close(connection)
                 _try_close(new_socket)
                 p(
                     "SSL error: Rejecting %s for %s"

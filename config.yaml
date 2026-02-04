@@ -11,7 +11,7 @@ PROGRAM: <some program>
 
 # Server and port
 SERVER_IP: 'localhost'
-SERVER_PORT: 443
+SERVER_PORT: 43201
 PROXY_IS_IP:  True
 USE_PROXY: False
 PROXY_HOST: 'localhost'
