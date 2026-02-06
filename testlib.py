@@ -21,7 +21,6 @@ import threading
 import select
 import traceback
 import multiprocessing
-import ctypes
 import signal
 
 # What port the clients will try to connect to
@@ -205,7 +204,7 @@ def p(msg):
     # this allows us to pickup bottle messages too
     sys.stderr.flush()
     with print_lock:
-        tid = ctypes.CDLL("libc.so.6").syscall(224)
+        tid = threading.get_native_id()
         ts = datetime.datetime.fromtimestamp(
             time.time()).strftime("%Y-%m-%d %H:%M:%S.%f")
         print(f"{ts}: {os.getpid()}:{tid}- {msg}")
