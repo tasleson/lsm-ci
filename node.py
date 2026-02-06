@@ -41,6 +41,18 @@ import tempfile
 import shutil
 import threading
 import errno
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+# Code signing public key (Ed25519)
+# This key verifies signatures on auto-updated files to prevent
+# a compromised server from pushing malicious code.
+# PRODUCTION: Replace this with your production public key (generated offline)
+# For initial testing, we use the test key
+CODE_SIGNING_PUBLIC_KEY = "cd8815f6f0c6c10debc670722401c1c5bdd39e72bb96b388410886d9fb7d62d4"
+
+# Development mode: set LSM_CI_DEV_MODE=1 to bypass signature verification
+# Useful for rapid development/testing. NEVER use in production!
+DEV_MODE = os.getenv("LSM_CI_DEV_MODE", "") == "1"
 
 
 class ThreadSafeJobManager:
@@ -546,13 +558,13 @@ class Cmds(object):
             return "", 404, "Job not found"
 
     @staticmethod
-    def md5_files(files):
+    def sha256_files(files):
         """
-        Return the md5 for a list of files, the file cannot contain any '/' and
+        Return the SHA-256 hash for a list of files. The file cannot contain any '/' and
         we are restricting it to the same directory as the node.py executing
         directory as we are only expecting to check files in the same directory.
         :param files: List of files
-        :return: An array of md5sums in the order the files were given to us.
+        :return: An array of SHA-256 hashes in the order the files were given to us.
         """
         rc = []
 
@@ -567,7 +579,7 @@ class Cmds(object):
             full_fn = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                    file_name)
             if os.path.exists(full_fn) and os.path.isfile(full_fn):
-                rc.append(testlib.file_md5(full_fn))
+                rc.append(testlib.file_sha256(full_fn))
             else:
                 # If a file doesn't exist lets return a bogus value, then the
                 # server will push the new file down.
@@ -577,29 +589,89 @@ class Cmds(object):
 
     @staticmethod
     def _update_files(tmp_dir, file_data):
-        src_files = []
+        """
+        Update files with cryptographic signature verification.
 
-        # Dump the file locally to temp directory
+        Security model:
+        1. Verify ALL signatures BEFORE writing ANY files (atomic check)
+        2. Use embedded public key (tamper-evident)
+        3. Reject updates with missing or invalid signatures
+
+        :param tmp_dir: Temporary directory for staging files
+        :param file_data: List of dicts with keys: 'fn', 'data', 'sha256', 'signature'
+        :return: ("", status_code, error_message)
+        """
+        # Get the public key
+        if not CODE_SIGNING_PUBLIC_KEY:
+            return "", 412, "Code signing public key not configured"
+
+        try:
+            public_key = ed25519.Ed25519PublicKey.from_public_bytes(
+                bytes.fromhex(CODE_SIGNING_PUBLIC_KEY) if isinstance(
+                    CODE_SIGNING_PUBLIC_KEY, str) else CODE_SIGNING_PUBLIC_KEY)
+        except Exception as e:
+            return "", 412, f"Failed to load public key: {e}"
+
+        # Phase 1: Write files to temp directory and collect for verification
+        tmp_files_data = []
+
         for i in file_data:
             fn = i["fn"]
             data = i["data"]
-            md5 = i["md5"]
+            sha256_hash = i.get("sha256")
+            signature = i.get("signature")
 
             if "/" in fn:
                 return "", 412, f"File name has directory sep. in it! {fn}"
+
+            if not sha256_hash:
+                return "", 412, f"Missing SHA-256 hash for {fn}"
+
+            if not signature:
+                return "", 412, f"Missing signature for {fn}"
 
             tmp_file = os.path.join(tmp_dir, fn)
 
             with open(tmp_file, "w") as t:
                 t.write(data)
 
-            if md5 != testlib.file_md5(tmp_file):
-                return "", 412, f"md5 miss-match for {tmp_file}"
+            tmp_files_data.append({
+                'fn': fn,
+                'tmp_file': tmp_file,
+                'expected_hash': sha256_hash,
+                'signature': signature
+            })
 
-            src_files.append(tmp_file)
+        # Phase 2: Verify ALL signatures BEFORE moving ANY files
+        testlib.p("Verifying signatures...")
 
-        # Move the files into position
-        for src_path_name in src_files:
+        for item in tmp_files_data:
+            fn = item['fn']
+            tmp_file = item['tmp_file']
+            expected_hash = item['expected_hash']
+            signature = item['signature']
+
+            # Calculate actual hash
+            actual_hash = testlib.file_sha256(tmp_file)
+
+            # Verify hash matches
+            if actual_hash != expected_hash:
+                return "", 412, f"Hash mismatch for {fn}: expected {expected_hash}, got {actual_hash}"
+
+            # Verify signature
+            try:
+                hash_bytes = bytes.fromhex(expected_hash)
+                sig_bytes = bytes.fromhex(signature)
+                public_key.verify(sig_bytes, hash_bytes)
+                testlib.p(f"✓ Signature valid for {fn}")
+            except Exception as e:
+                return "", 412, f"Invalid signature for {fn}: {e}"
+
+        # Phase 3: All signatures valid - move files into position
+        testlib.p("All signatures verified. Installing files...")
+
+        for item in tmp_files_data:
+            src_path_name = item['tmp_file']
             perms = None
             name = os.path.basename(src_path_name)
             dest_path_name = os.path.join(
@@ -622,13 +694,15 @@ class Cmds(object):
     @staticmethod
     def update_files(file_data):
         """
-        Given a file_name, the file_contents and the md5sum for the file we will
-        dump the file contents to a tmp file, validate the md5 and if all is
-        well we will replace the file_name with it.
+        Update files with cryptographic signature verification.
 
-        Note: file data is a hash with keys: 'fn', 'data', 'md5'
+        Given file data with signatures, verify Ed25519 signatures before
+        accepting any updates. This prevents a compromised server from
+        pushing malicious code.
 
-        :param file_data:
+        Note: file data is a hash with keys: 'fn', 'data', 'sha256', 'signature'
+
+        :param file_data: List of file update dicts
         :return: http 200 on success, else 412
         """
         # Create a temp directory
@@ -662,6 +736,82 @@ class Cmds(object):
         os.execl(sys.executable, *([sys.executable] + sys.argv))
 
 
+def verify_startup_signatures():
+    """
+    Verify signatures of critical files on startup.
+
+    This detects if files have been tampered with on disk.
+    Runs before connecting to server to fail fast if compromised.
+
+    Returns: (success, error_message)
+    """
+    # Allow bypassing in development mode
+    if DEV_MODE:
+        testlib.p("⚠ DEV MODE: Skipping startup signature verification")
+        return True, ""
+
+    # Check if signatures.json exists
+    sig_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            'signatures.json')
+    if not os.path.exists(sig_file):
+        return False, "signatures.json not found - cannot verify file integrity"
+
+    try:
+        with open(sig_file) as f:
+            signatures = json.load(f)
+    except Exception as e:
+        return False, f"Failed to load signatures.json: {e}"
+
+    # Get public key
+    public_key_bytes = CODE_SIGNING_PUBLIC_KEY
+    if not public_key_bytes:
+        return False, "CODE_SIGNING_PUBLIC_KEY not configured"
+
+    try:
+        public_key = ed25519.Ed25519PublicKey.from_public_bytes(
+            bytes.fromhex(public_key_bytes) if isinstance(
+                public_key_bytes, str) else public_key_bytes)
+    except Exception as e:
+        return False, f"Failed to load public key: {e}"
+
+    # Verify critical files
+    files_to_check = ['node.py', 'testlib.py']
+
+    for filename in files_to_check:
+        if filename not in signatures:
+            return False, f"No signature for {filename} in signatures.json"
+
+        sig_data = signatures[filename]
+        expected_hash = sig_data.get('sha256')
+        signature = sig_data.get('signature')
+
+        if not expected_hash or not signature:
+            return False, f"Invalid signature data for {filename}"
+
+        # Calculate actual hash
+        file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                 filename)
+        try:
+            actual_hash = testlib.file_sha256(file_path)
+        except Exception as e:
+            return False, f"Failed to hash {filename}: {e}"
+
+        # Verify hash matches
+        if actual_hash != expected_hash:
+            return False, f"File {filename} has been modified (hash mismatch) - possible tampering!"
+
+        # Verify signature
+        try:
+            hash_bytes = bytes.fromhex(expected_hash)
+            sig_bytes = bytes.fromhex(signature)
+            public_key.verify(sig_bytes, hash_bytes)
+        except Exception as e:
+            return False, f"Invalid signature for {filename}: {e}"
+
+    testlib.p("✓ Startup signature verification passed")
+    return True, ""
+
+
 def process_request(req):
     """
     Processes the request.
@@ -688,6 +838,22 @@ if __name__ == "__main__":
     STARTUP_CWD = os.getcwd()
 
     _load_config()
+
+    # Verify signatures on startup to detect tampering
+    testlib.p("Verifying file signatures on startup...")
+    success, error_msg = verify_startup_signatures()
+    if not success:
+        testlib.p(f"✗ SECURITY ERROR: Signature verification failed!")
+        testlib.p(f"  {error_msg}")
+        testlib.p("")
+        testlib.p("Possible causes:")
+        testlib.p("  - Files have been tampered with")
+        testlib.p("  - Files were modified but not re-signed")
+        testlib.p("  - signatures.json is missing or invalid")
+        testlib.p("")
+        testlib.p("DO NOT START until this is resolved!")
+        testlib.p("To re-sign: python3 tools/sign_files.py --key <key>")
+        sys.exit(1)
 
     server = config["SERVER_IP"]
     port = config["SERVER_PORT"]

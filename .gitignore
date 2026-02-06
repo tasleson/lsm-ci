@@ -5,3 +5,7 @@ start_node_manager.sh
 *.key
 *.csr
 *.srl
+
+# Code signing keys (production keys should NEVER be committed)
+certs/code_signing.key
+certs/code_signing.pub

@@ -27,6 +27,10 @@ import yaml
 
 pp = pprint.PrettyPrinter(depth=4)
 
+# Development mode: set LSM_CI_DEV_MODE=1 to bypass signature verification
+# and disable client updates. Useful for rapid development/testing. NEVER use in production!
+DEV_MODE = os.getenv("LSM_CI_DEV_MODE", "") == "1"
+
 
 class ThreadSafeWorkLog:
     """
@@ -633,7 +637,79 @@ def e_handler():
     response.status = 200
 
 
+def verify_startup_signatures():
+    """
+    Verify that signatures.json exists and files match their signatures.
+
+    The server should verify it has valid signed files before pushing
+    updates to clients. This prevents pushing unsigned or tampered files.
+
+    Returns: (success, error_message)
+    """
+    # Allow bypassing in development mode
+    if DEV_MODE:
+        testlib.p("⚠ DEV MODE: Skipping server startup signature verification")
+        testlib.p("  Client updates will be disabled")
+        return True, ""
+
+    testlib.p("Verifying file signatures on server startup...")
+
+    # Check if signatures.json exists
+    sig_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            'signatures.json')
+    if not os.path.exists(sig_file):
+        return False, "signatures.json not found - cannot push updates to clients"
+
+    try:
+        with open(sig_file) as f:
+            signatures = json.load(f)
+    except Exception as e:
+        return False, f"Failed to load signatures.json: {e}"
+
+    # Verify the files we'll be pushing match their signatures
+    files_to_check = ['node.py', 'testlib.py', 'ci_unit_test.sh']
+
+    for filename in files_to_check:
+        if filename not in signatures:
+            return False, f"No signature for {filename} in signatures.json"
+
+        sig_data = signatures[filename]
+        expected_hash = sig_data.get('sha256')
+
+        if not expected_hash:
+            return False, f"Invalid signature data for {filename}"
+
+        # Calculate actual hash
+        file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                 filename)
+        try:
+            actual_hash = testlib.file_sha256(file_path)
+        except Exception as e:
+            return False, f"Failed to hash {filename}: {e}"
+
+        # Verify hash matches
+        if actual_hash != expected_hash:
+            return False, f"File {filename} has been modified since signing - re-sign before starting!"
+
+    testlib.p("✓ Server startup signature verification passed")
+    testlib.p(
+        "  All files match their signatures and are ready to push to clients")
+    return True, ""
+
+
 if __name__ == "__main__":
+
+    # Verify signatures before starting
+    success, error_msg = verify_startup_signatures()
+    if not success:
+        testlib.p(f"✗ SIGNATURE VERIFICATION FAILED!")
+        testlib.p(f"  {error_msg}")
+        testlib.p("")
+        testlib.p("The server will NOT push unsigned files to clients.")
+        testlib.p("Please re-sign files before starting:")
+        testlib.p("  python3 tools/sign_files.py --key <your-signing-key>")
+        testlib.p("")
+        sys.exit(1)
 
     # Start up the node manager
     node_mgr.start()

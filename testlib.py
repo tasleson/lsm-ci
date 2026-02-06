@@ -45,6 +45,10 @@ SERVER_HOSTNAME = os.getenv("LSM_CI_SERVER_HOSTNAME", "ci.asleson.org")
 
 hs = os.getenv("LSM_CI_HASH_SALT", "")
 
+# Development mode: set LSM_CI_DEV_MODE=1 to bypass signature verification
+# and disable client updates. Useful for rapid development/testing. NEVER use in production!
+DEV_MODE = os.getenv("LSM_CI_DEV_MODE", "") == "1"
+
 RUN = multiprocessing.Value("i", 1)
 
 print_lock = threading.Lock()
@@ -56,32 +60,32 @@ def _file_data(file_name):
     return file_contents
 
 
-def file_md5(file_name):
+def file_sha256(file_name):
     """
-    Given a file name return md5 signature
+    Given a file name return SHA-256 hash
     :param file_name: The name of the file
-    :return: md5 signature.
+    :return: SHA-256 hash hex string.
     """
-    return md5(_file_data(file_name))
+    return sha256(_file_data(file_name))
 
 
-def file_md5_and_data(file_name):
+def file_sha256_and_data(file_name):
     """
-    Returns the md5 and contents of file data.
+    Returns the SHA-256 hash and contents of file data.
     :param file_name: File name to open
-    :return: (md5 file data, data)
+    :return: (SHA-256 hash, data)
     """
     fd = _file_data(file_name)
-    return md5(fd), fd
+    return sha256(fd), fd
 
 
-def md5(t):
+def sha256(t):
     """
-    Calculate the md5 of data t
-    :param t: Data to generate md5 for
-    :return: md5 hex digest
+    Calculate the SHA-256 hash of data t
+    :param t: Data to generate SHA-256 for
+    :return: SHA-256 hex digest
     """
-    h = hashlib.md5()
+    h = hashlib.sha256()
     h.update(t.encode("utf-8"))
     h.update(hs.encode("utf-8"))
     return h.hexdigest()
@@ -148,7 +152,7 @@ class Transport(object):
     Handles the messages on the byte stream.
     """
 
-    HDR_LEN = 10 + 32
+    HDR_LEN = 10 + 64  # 10 digits for length + 64 chars for SHA-256 hex
 
     def __init__(self, s):
         self.s = s
@@ -180,7 +184,7 @@ class Transport(object):
 
         payload = self._read_all(payload_len)
 
-        if md5(payload) != signature:
+        if sha256(payload) != signature:
             raise IOError("Incorrect signature!")
 
         return deserialize(payload)
@@ -194,10 +198,10 @@ class Transport(object):
 
         # Message will have the following format
         # 10 digit payload length
-        # 32 character payload md5
+        # 64 character payload SHA-256
         # payload
         serialized_msg = msg.serialize()
-        digest = md5(serialized_msg)
+        digest = sha256(serialized_msg)
 
         to_send = f"{str(len(serialized_msg)).zfill(10)}{digest}{serialized_msg}"
         self.s.sendall(bytes(to_send.encode("utf-8")))
@@ -537,33 +541,65 @@ class Node(object):
                 p(f"Error: when creating job: {resp}")
             return None
 
-    def get_file_md5(self, file_list):
+    def get_file_sha256(self, file_list):
         """
-        Get an array of file signatures
+        Get an array of file SHA-256 hashes
         :param file_list:
-        :return: Array of file signatures.
+        :return: Array of file hashes.
         """
         with self.lock:
-            resp = self._rpc("md5_files", (file_list, ))
+            resp = self._rpc("sha256_files", (file_list, ))
             if resp and resp.ec == 200:
                 return resp.result
             else:
-                p(f"Error when retrieving md5sums {resp}")
+                p(f"Error when retrieving SHA-256 hashes {resp}")
             return None
 
     def update_files(self, file_list):
         """
-        For each file in the file list, load it into memory, md5 it and
-        send it to the client!
+        For each file in the file list, load it into memory, hash it,
+        load its signature, and send it to the client!
         :param file_list: List of files.
         :return: Boolean
         """
+        # Load signatures.json
+        sig_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                'signatures.json')
+        try:
+            with open(sig_file) as f:
+                signatures = json.load(f)
+        except FileNotFoundError:
+            p(f"Error: signatures.json not found at {sig_file}")
+            return False
+        except json.JSONDecodeError as e:
+            p(f"Error: Invalid signatures.json: {e}")
+            return False
+
         pushed_files = []
 
         for f in file_list:
             fn = os.path.join(os.path.dirname(os.path.realpath(__file__)), f)
-            md5_sum, data = file_md5_and_data(fn)
-            pushed_files.append(dict(fn=f, md5=md5_sum, data=data))
+            sha256_hash, data = file_sha256_and_data(fn)
+
+            # Get signature for this file
+            if f not in signatures:
+                p(f"Error: No signature found for {f}")
+                return False
+
+            sig_data = signatures[f]
+            expected_hash = sig_data['sha256']
+            signature = sig_data['signature']
+
+            # Sanity check: verify hash matches signature
+            if sha256_hash != expected_hash:
+                p(f"Error: Hash mismatch for {f}! File may have been modified after signing."
+                  )
+                p(f"  Expected: {expected_hash}")
+                p(f"  Actual:   {sha256_hash}")
+                return False
+
+            pushed_files.append(
+                dict(fn=f, sha256=sha256_hash, signature=signature, data=data))
 
         resp = self._rpc("update_files", (pushed_files, ))
         if resp and resp.ec == 200:
@@ -788,35 +824,40 @@ class NodeManager(object):
     @staticmethod
     def check_for_updates(node):
         """
-        Get the current signatures of the files we have and compare it to
-        the ones on the node, if they don't match push them down and restart
-        the client
+        Get the current SHA-256 hashes of the files we have and compare them to
+        the ones on the node. If they don't match, push them down and restart
+        the client.
         :param node: Client node of interest
         :return: None.
         """
+        # Skip client updates in development mode
+        if DEV_MODE:
+            p("⚠ DEV MODE: Skipping client update check")
+            return
+
         p("Checking for updates")
-        local_signatures = []
+        local_hashes = []
 
         files = ["node.py", "testlib.py", "ci_unit_test.sh"]
 
         for f in files:
-            local_signatures.append(file_md5(f))
+            local_hashes.append(file_sha256(f))
 
-        remote_signatures = node.get_file_md5(files)
-        if remote_signatures:
-            if local_signatures != remote_signatures:
+        remote_hashes = node.get_file_sha256(files)
+        if remote_hashes:
+            if local_hashes != remote_hashes:
                 p("Updating client!")
                 for i, fn in enumerate(files):
-                    if local_signatures[i] != remote_signatures[i]:
-                        p(f"File {fn} local= {local_signatures[i]} remote= {remote_signatures[i]}"
+                    if local_hashes[i] != remote_hashes[i]:
+                        p(f"File {fn} local= {local_hashes[i]} remote= {remote_hashes[i]}"
                           )
 
                 if node.update_files(files):
-                    remote_signatures = node.get_file_md5(files)
-                    if local_signatures == remote_signatures:
+                    remote_hashes = node.get_file_sha256(files)
+                    if local_hashes == remote_hashes:
                         node.restart()
                     else:
-                        p("After updating files we have a md5 miss-match,"
+                        p("After updating files we have a hash mismatch,"
                           " not restarting client!")
             else:
                 p("Client is current!")
