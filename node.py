@@ -3,7 +3,7 @@
 WARNING!  This file is auto updated from the node manager.  Any changes will
 be lost when the client disconnects and reconnects.
 
-This file is compatible with python2 and python3.
+This file is compatible with python3 only.
 
 Theory of operation
 1. Read the config file getting
@@ -39,8 +39,131 @@ import time
 import traceback
 import tempfile
 import shutil
+import threading
+import errno
 
-jobs = {}
+
+class ThreadSafeJobManager:
+    """
+    Thread-safe wrapper for the jobs dictionary.
+    All operations are protected by a reentrant lock.
+    """
+
+    def __init__(self):
+        self._jobs = {}
+        self._lock = threading.RLock()  # Reentrant lock
+
+    def create_job(self, job_id, job_data):
+        """
+        Atomically create a new job.
+        Returns True if created, False if already exists.
+        """
+        with self._lock:
+            if job_id in self._jobs:
+                return False
+            self._jobs[job_id] = job_data
+            return True
+
+    def delete_job(self, job_id):
+        """
+        Atomically delete a job.
+        Returns True if deleted, False if not found.
+        """
+        with self._lock:
+            if job_id in self._jobs:
+                del self._jobs[job_id]
+                return True
+            return False
+
+    def get_job(self, job_id):
+        """
+        Get a copy of job data.
+        Returns dict or None if not found.
+        """
+        with self._lock:
+            if job_id in self._jobs:
+                return dict(self._jobs[job_id])
+            return None
+
+    def update_job_status(self, job_id, status):
+        """
+        Atomically update job status.
+        Returns True if updated, False if job not found.
+        """
+        with self._lock:
+            if job_id in self._jobs:
+                self._jobs[job_id]["STATUS"] = status
+                return True
+            return False
+
+    def find_running_job_for_array(self, array_id):
+        """
+        Find if there's a running job for the given array.
+        Returns (job_id, job_data_copy) or (None, None).
+        Updates job status while holding lock.
+        """
+        with self._lock:
+            for job_id, job_data in list(self._jobs.items()):
+                if job_data["ID"] == array_id:
+                    # Update status while we have the lock
+                    self._update_status_locked(job_id, job_data)
+                    if job_data["STATUS"] == "RUNNING":
+                        return job_id, dict(job_data)
+            return None, None
+
+    def _update_status_locked(self, job_id, job_data):
+        """
+        Internal method to update status (assumes lock is held).
+        """
+        p = job_data["PROCESS"]
+        p.join(0)
+        if not p.is_alive():
+            if p.exitcode == 0:
+                job_data["STATUS"] = "SUCCESS"
+            else:
+                job_data["STATUS"] = "FAIL"
+
+    def get_job_and_update_status(self, job_id):
+        """
+        Get job and update its status atomically.
+        Returns job_data dict or None.
+        """
+        with self._lock:
+            if job_id in self._jobs:
+                job_data = self._jobs[job_id]
+                self._update_status_locked(job_id, job_data)
+                return dict(job_data)
+            return None
+
+    def get_all_jobs(self):
+        """
+        Get a snapshot of all jobs with updated status.
+        Returns a list of (job_id, job_data_copy) tuples.
+        """
+        with self._lock:
+            result = []
+            for job_id, job_data in list(self._jobs.items()):
+                # Update status while we have the lock
+                self._update_status_locked(job_id, job_data)
+                # Return a copy to avoid external modifications
+                result.append((job_id, dict(job_data)))
+            return result
+
+    def get_running_jobs(self):
+        """
+        Get a snapshot of running jobs only with updated status.
+        Returns a list of (job_id, job_data_copy) tuples.
+        """
+        with self._lock:
+            result = []
+            for job_id, job_data in list(self._jobs.items()):
+                self._update_status_locked(job_id, job_data)
+                if job_data["STATUS"] == "RUNNING":
+                    result.append((job_id, dict(job_data)))
+            return result
+
+
+jobs = ThreadSafeJobManager()
 config = {}
 
 STARTUP_CWD = ""
@@ -70,8 +193,14 @@ def _file_name(job_id, log_dir=None):
     if log_dir is None:
         log_dir = config["LOGDIR"]
 
-    if not os.path.exists(log_dir):
+    # Race-safe directory creation
+    try:
         os.makedirs(log_dir)
+    except OSError as e:
+        # It's OK if directory already exists (another process created it)
+        if e.errno != errno.EEXIST:
+            raise
+        # EEXIST is expected and fine - directory exists
 
     base = "%s/%s" % (log_dir, job_id)
     return base + ".out"
@@ -153,47 +282,8 @@ def _remove_file(job_id):
         pass
 
 
-def _update_state(job_id):
-    global jobs
-    job = jobs[job_id]
-
-    # See if the process has ended
-    p = job["PROCESS"]
-    p.join(0)
-    if not p.is_alive():
-        testlib.p("%s exited with %s " % (p.name, str(p.exitcode)))
-        sys.stdout.flush()
-
-        if p.exitcode == 0:
-            job["STATUS"] = "SUCCESS"
-        else:
-            job["STATUS"] = "FAIL"
-
-
-def _return_state(job_id, only_running=False):
-    _update_state(job_id)
-    job = jobs[job_id]
-
-    if not only_running or (only_running and job["STATUS"] == "RUNNING"):
-        return {
-            "STATUS": job["STATUS"],
-            "ID": job["ID"],
-            "JOB_ID": job_id,
-            "PLUGIN": job["PLUGIN"],
-        }
-    return None
-
-
-# State for tests are are currently running
-# @returns JSON array with the following:
-#
-def _only_running():
-    rc = []
-    for k in jobs.keys():
-        s = _return_state(k, True)
-        if s:
-            rc.append(s)
-    return rc
+# Note: _update_state and _return_state functions have been replaced
+# by methods in ThreadSafeJobManager class for thread safety
 
 
 class Cmds(object):
@@ -215,7 +305,9 @@ class Cmds(object):
         if not re.match(git_url_pattern, repo):
             return False
         # Additional check: no shell metacharacters
-        dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '\n', '\r']
+        dangerous_chars = [
+            ';', '&', '|', '`', '$', '(', ')', '<', '>', '\n', '\r'
+        ]
         return not any(char in repo for char in dangerous_chars)
 
     @staticmethod
@@ -263,7 +355,15 @@ class Cmds(object):
             [ {"STATUS": ['RUNNING'|'SUCCESS'|'FAIL'}, "ID": <array id>,
             "JOB_ID": [a-z]{32}, "PLUGIN":'lsm plugin'}, ... ]
         """
-        rc = _only_running()
+        global jobs
+        rc = []
+        for job_id, job_data in jobs.get_running_jobs():
+            rc.append({
+                "STATUS": job_data["STATUS"],
+                "ID": job_data["ID"],
+                "JOB_ID": job_id,
+                "PLUGIN": job_data["PLUGIN"],
+            })
 
         return rc, 200, ""
 
@@ -295,14 +395,10 @@ class Cmds(object):
 
         if any([x for x in config["ARRAYS"] if x["ID"] == array_id]):
 
-            # Add a check to make sure we aren't already _running_
-            # a job for this array
-            for k, v in jobs.items():
-                if v["ID"] == array_id:
-                    # Update status to make sure
-                    _update_state(k)
-                    if v["STATUS"] == "RUNNING":
-                        return "", 412, "Job already running on array"
+            # Atomically check for existing running job for this array
+            existing_job_id, _ = jobs.find_running_job_for_array(array_id)
+            if existing_job_id:
+                return "", 412, "Job already running on array"
 
             # Run the job
             # Build the arguments for the script
@@ -327,10 +423,16 @@ class Cmds(object):
             p.name = "|".join(incoming)
             p.start()
 
-            jobs[job_id] = dict(STATUS="RUNNING",
-                                PROCESS=p,
-                                ID=array_id,
-                                PLUGIN=plug)
+            job_data = dict(STATUS="RUNNING",
+                            PROCESS=p,
+                            ID=array_id,
+                            PLUGIN=plug)
+
+            if not jobs.create_job(job_id, job_data):
+                # Extremely unlikely: job_id collision
+                testlib.p("Job ID collision for %s" % job_id)
+                return "", 500, "Failed to create job (ID collision)"
+
             return job_id, 201, ""
         else:
             return "", 400, "Invalid array specified!"
@@ -341,9 +443,15 @@ class Cmds(object):
         Returns all known jobs regardless of status
         :return: array of dictionaries
         """
+        global jobs
         rc = []
-        for k in jobs.keys():
-            rc.append(_return_state(k))
+        for job_id, job_data in jobs.get_all_jobs():
+            rc.append({
+                "STATUS": job_data["STATUS"],
+                "ID": job_data["ID"],
+                "JOB_ID": job_id,
+                "PLUGIN": job_data["PLUGIN"],
+            })
 
         return rc, 200, ""
 
@@ -355,8 +463,14 @@ class Cmds(object):
         :return: job state
         """
         global jobs
-        if job_id in jobs:
-            return _return_state(job_id), 200, ""
+        job_data = jobs.get_job_and_update_status(job_id)
+        if job_data:
+            return {
+                "STATUS": job_data["STATUS"],
+                "ID": job_data["ID"],
+                "JOB_ID": job_id,
+                "PLUGIN": job_data["PLUGIN"],
+            }, 200, ""
         return "", 404, "Job not found!"
 
     @staticmethod
@@ -370,35 +484,38 @@ class Cmds(object):
             404 if job is not found
             json payload { "EC": <exit code>, "OUTPUT": "std out + std error"}
         """
-        if job_id in jobs:
-            j = jobs[job_id]
-            log = _file_name(job_id)
-            if j["STATUS"] != "RUNNING":
-                try:
-                    testlib.p("Retrieving log file: %s" % log)
-                    with open(log, "r") as foo:
-                        result = json.load(foo)
+        global jobs
+        job_data = jobs.get_job_and_update_status(job_id)
 
-                    return json.dumps(result), 200, ""
-                except:
-                    testlib.p("Exception in retrieving log file!")
-                    testlib.p(str(traceback.format_exc()))
-                    # We had a job in the hash, but an error while processing
-                    # the log file, we will return a 404 and make sure the
-                    # file is indeed gone
-                    try:
-                        del jobs[job_id]
-                        _remove_file(job_id)
-                    except:
-                        # These aren't the errors you're looking for..., move
-                        # along...
-                        pass
-                    return "", 404, "Job log file not found"
-            else:
-                return "", 400, "Job still running"
-        else:
+        if job_data is None:
             testlib.p("Job ID %s not found in hash!" % job_id)
             return "", 404, "Job not found"
+
+        if job_data["STATUS"] == "RUNNING":
+            return "", 400, "Job still running"
+
+        # Job is complete, retrieve log file
+        log = _file_name(job_id)
+        try:
+            testlib.p("Retrieving log file: %s" % log)
+            with open(log, "r") as foo:
+                result = json.load(foo)
+
+            return json.dumps(result), 200, ""
+        except:
+            testlib.p("Exception in retrieving log file!")
+            testlib.p(str(traceback.format_exc()))
+            # We had a job in the hash, but an error while processing
+            # the log file, we will return a 404 and make sure the
+            # file is indeed gone
+            try:
+                jobs.delete_job(job_id)
+                _remove_file(job_id)
+            except:
+                # These aren't the errors you're looking for..., move
+                # along...
+                pass
+            return "", 404, "Job log file not found"
 
     @staticmethod
     def job_delete(job_id):
@@ -410,16 +527,20 @@ class Cmds(object):
                  or 404 if job is not found
         """
         global jobs
-        if job_id in jobs:
-            j = jobs[job_id]
+        job_data = jobs.get_job_and_update_status(job_id)
 
-            if j["STATUS"] != "RUNNING":
-                del jobs[job_id]
-                _remove_file(job_id)
-                return "", 200, ""
-            else:
-                return "", 400, "Job still running"
+        if job_data is None:
+            return "", 404, "Job not found"
+
+        if job_data["STATUS"] == "RUNNING":
+            return "", 400, "Job still running"
+
+        # Job exists and is not running, safe to delete
+        if jobs.delete_job(job_id):
+            _remove_file(job_id)
+            return "", 200, ""
         else:
+            # Job was deleted between check and delete (unlikely but possible)
             return "", 404, "Job not found"
 
     @staticmethod

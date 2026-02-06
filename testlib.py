@@ -284,7 +284,8 @@ class TestNode(object):
             # NOTE: For local testing, ensure certificates have correct hostnames
             p("server ip = %s" % self.server_ip)
 
-            self.s = context.wrap_socket(self.s, server_hostname="ci.asleson.org")
+            self.s = context.wrap_socket(self.s,
+                                         server_hostname="ci.asleson.org")
 
             if self.use_proxy:
                 self.s.do_handshake()
@@ -401,15 +402,24 @@ class Node(object):
     def replace(self, other):
         """
         Replaces a connection with a node with this one.
+        NOTE: Caller should hold NodeManager lock to ensure thread safety.
         :param other: One to use as replacement.
         :return: None
         """
-        with self.lock:
-            with other.lock:
-                # Close this connection
-                self.close()
-                self.state = other.state
-                self.s = other.state
+        # Acquire locks in deterministic order (by object id) to prevent deadlock
+        # This ensures that if two threads try to replace nodes, they always
+        # acquire locks in the same order
+        first, second = sorted([self, other], key=lambda n: id(n))
+
+        with first.lock:
+            with second.lock:
+                # Close old connection (self)
+                _try_close(self.s)
+                self.state = Node.UNUSABLE
+
+                # Copy state from new connection (other)
+                self._state = other._state
+                self.s = other.s
                 self.t = other.t
                 self.client_ip = other.client_ip
                 self.client_port = other.client_port
@@ -576,6 +586,13 @@ class NodeManager(object):
        during the duration of the test will not be utilized.  Clients that
        fall out during the test will be logged as failing with status on
        github stating as much
+
+    Lock Ordering Policy (to prevent deadlocks):
+     - If NodeManager.lock is needed, ALWAYS acquire it BEFORE any Node.lock
+     - Never acquire NodeManager.lock while holding a Node.lock
+     - Avoid holding NodeManager.lock during slow operations (e.g., network I/O)
+       by releasing it before calling methods like verify() that do network calls
+     - When acquiring multiple Node locks, use deterministic ordering (by id())
     """
 
     def __init__(self, listening_ip="", port=PORT):
@@ -601,13 +618,17 @@ class NodeManager(object):
         Find which nodes are responsive.
         :return: List of responsive nodes.
         """
-        rc = []
+        # Step 1: Get list of nodes under lock (quick)
+        nodes_to_check = []
         with self.lock:
-            for i in self.known_clients.values():
-                # Make sure the node is responsive before adding it to the list
-                # of nodes to run tests against
-                if i.verify():
-                    rc.append(i)
+            nodes_to_check = list(self.known_clients.values())
+
+        # Step 2: Verify nodes WITHOUT holding NodeManager lock
+        # This prevents deadlock - verify() acquires Node lock
+        rc = []
+        for node in nodes_to_check:
+            if node.verify():
+                rc.append(node)
 
         return rc
 
@@ -730,9 +751,14 @@ class NodeManager(object):
 
                     # If all the nodes are doing nothing, lets ping them to
                     # ensure they still are present and responding
+                    # Get snapshot of nodes without holding lock during verify
+                    nodes_to_ping = []
                     with node_mgr.lock:
-                        for i in node_mgr.known_clients.values():
-                            i.verify()
+                        nodes_to_ping = list(node_mgr.known_clients.values())
+
+                    # Ping nodes without holding NodeManager lock
+                    for node in nodes_to_ping:
+                        node.verify()
 
             except KeyboardInterrupt:
                 _try_close(bindsocket)

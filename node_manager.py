@@ -34,6 +34,60 @@ import yaml
 
 pp = pprint.PrettyPrinter(depth=4)
 
+
+class ThreadSafeWorkLog:
+    """
+    Thread-safe wrapper for the work log deque.
+    All operations are protected by a lock.
+    """
+
+    def __init__(self, maxlen=20):
+        self._deque = deque(maxlen=maxlen)
+        self._lock = threading.Lock()
+
+    def append(self, item):
+        """Add an item to the work log."""
+        with self._lock:
+            self._deque.append(item)
+
+    def get_all(self):
+        """Get a snapshot of all items (newest to oldest)."""
+        with self._lock:
+            return list(reversed(self._deque))
+
+    def find_by_test_id(self, test_id):
+        """
+        Find a work item by test_run_id.
+        Returns a copy of the item or None.
+        """
+        with self._lock:
+            for item in self._deque:
+                if int(item["test_run_id"]) == int(test_id):
+                    return dict(item)  # Return a copy
+            return None
+
+
+class AtomicCounter:
+    """
+    Thread-safe counter with atomic increment.
+    """
+
+    def __init__(self, initial=0):
+        self._value = initial
+        self._lock = threading.Lock()
+
+    def increment(self):
+        """Atomically increment and return the NEW value."""
+        with self._lock:
+            self._value += 1
+            return self._value
+
+    def get(self):
+        """Get current value."""
+        with self._lock:
+            return self._value
+
+
 # What Host/IP & port to serve on
 HOST = os.getenv("HOST", "localhost")
 PORT = os.getenv("PORT", "8080")
@@ -70,12 +124,13 @@ POST_STATUS = bool(os.getenv("POST_STATUS", ""))
 f_name = re.compile("[a-z]{32}.html")
 
 # We are storing a history of work, so that we can go back and re-run as needed
-work_log = deque(maxlen=20)
+work_log = ThreadSafeWorkLog(maxlen=20)
 
 node_mgr = testlib.NodeManager(HOST)
 req_q = Queue.Queue()
+req_q_lock = threading.Lock()  # Lock for safe access to req_q.queue internals
 
-test_count = 0
+test_count = AtomicCounter()
 
 processing = None
 processing_mutex = threading.Lock()
@@ -406,15 +461,8 @@ def completed_requests():
     Handles the request for what has been completed.
     :return: JSON
     """
-    rc = []
-    c_r = reversed(list(work_log))
-
     response.content_type = "application/json"
-
-    for i in c_r:
-        rc.append(i)
-
-    return json.dumps(rc)
+    return json.dumps(work_log.get_all())
 
 
 @route("/processing")
@@ -443,10 +491,6 @@ def rerun_test(test_id):
     :param test_id:  Test id to re-run.
     :return: Appropriate http status code
     """
-    global test_count
-
-    tmp_id = 0
-
     # We are only expecting a number here
     try:
         tmp_id = int(test_id)
@@ -454,26 +498,20 @@ def rerun_test(test_id):
         response.status = 404
         return
 
-    submitted = False
+    # Thread-safe lookup in work_log
+    item = work_log.find_by_test_id(test_id)
 
-    for i in list(work_log):
-        # noinspection PyTypeChecker
-        if int(i["test_run_id"]) == int(test_id):
-            # Try to make the test counts unique
-            cpy = copy.deepcopy(i)
+    if item:
+        _p("Re-running test: client IP %s: %s %s" %
+           (request.remote_addr, str(test_id), str(item)))
 
-            _p("Re-running test: client IP %s: %s %s" %
-               (request.remote_addr, str(test_id), str(cpy)))
-
-            cpy["test_run_id"] = test_count
-            test_count += 1
-            req_q.put(cpy)
-            response.status = 200
-            submitted = True
-            break
-
-    if not submitted:
+        # Atomically get new test_run_id
+        item["test_run_id"] = test_count.increment()
+        req_q.put(item)
+        response.status = 200
+    else:
         response.status = 404
+
     return
 
 
@@ -514,9 +552,13 @@ def queue():
     rc = []
     response.content_type = "application/json"
 
-    wq = list(req_q.queue)
-    for i in wq:
-        rc.append(i)
+    # Thread-safe access to queue internals
+    # Hold lock while accessing req_q.queue to prevent race conditions
+    with req_q_lock:
+        # Access the internal deque under lock
+        wq = list(req_q.queue)
+        for i in wq:
+            rc.append(i)
 
     return json.dumps(rc)
 
@@ -547,8 +589,6 @@ def e_handler():
     Github calls this when we get a pull request
     :return: Http status code, 500 on error, else 200.
     """
-    global test_count
-
     # Check secret before we do *anything*
     if not _verify_signature(request.body.read(),
                              request.headers["X-Hub-Signature"]):
@@ -563,12 +603,15 @@ def e_handler():
 
         _p("Queuing unit tests for %s %s" % (clone, branch))
 
+        # Atomically get and increment test count
+        current_test_id = test_count.increment()
+
         info = dict(
             repo=repo,
             sha=sha,
             branch=branch,
             clone=clone,
-            test_run_id=test_count,
+            test_run_id=current_test_id,
         )
 
         # Lets immediately set something on the PR so that people looking at
@@ -581,8 +624,6 @@ def e_handler():
             "CI permissions",
         )
         req_q.put(info)
-
-        test_count += 1
     else:
         _p("Got an unexpected header from github")
         for k, v in request.headers.items():
