@@ -14,14 +14,15 @@ IP_ADDRESS = os.getenv("IP_ADDRESS", "127.0.0.1")
 
 # TLS certificate paths
 WRONG_SERVER_CERT = os.getenv("LSM_CI_WRONG_SERVER_CERT",
-                              "wrong_server_cert.pem")
+                              "certs/wrong_server_cert.pem")
 WRONG_CLIENT_CERT = os.getenv("LSM_CI_WRONG_CLIENT_CERT",
-                              "wrong_client_cert.pem")
-WRONG_CLIENT_KEY = os.getenv("LSM_CI_WRONG_CLIENT_KEY", "wrong_client_key.pem")
+                              "certs/wrong_client_cert.pem")
+WRONG_CLIENT_KEY = os.getenv("LSM_CI_WRONG_CLIENT_KEY",
+                             "certs/wrong_client_key.pem")
 
-SERVER_CERT_PEM = os.getenv("LSM_CI_SERVER_CERT_PEM", "server_cert.pem")
-CLIENT_CERT_PEM = os.getenv("LSM_CI_CLIENT_CERT_PEM", "client_cert.pem")
-CLIENT_KEY_PEM = os.getenv("LSM_CI_CLIENT_KEY_PEM", "client_key.pem")
+SERVER_CERT_PEM = os.getenv("LSM_CI_SERVER_CERT_PEM", "certs/server_cert.pem")
+CLIENT_CERT_PEM = os.getenv("LSM_CI_CLIENT_CERT_PEM", "certs/client_cert.pem")
+CLIENT_KEY_PEM = os.getenv("LSM_CI_CLIENT_KEY_PEM", "certs/client_key.pem")
 
 
 def failing_ssl():

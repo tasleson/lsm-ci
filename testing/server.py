@@ -11,9 +11,9 @@ import sys
 import os
 
 # TLS certificate paths
-SERVER_CERT_PEM = os.getenv("LSM_CI_SERVER_CERT_PEM", "server_cert.pem")
-SERVER_KEY_PEM = os.getenv("LSM_CI_SERVER_KEY_PEM", "server_key.pem")
-CLIENT_CERT_PEM = os.getenv("LSM_CI_CLIENT_CERT_PEM", "client_cert.pem")
+SERVER_CERT_PEM = os.getenv("LSM_CI_SERVER_CERT_PEM", "certs/server_cert.pem")
+SERVER_KEY_PEM = os.getenv("LSM_CI_SERVER_KEY_PEM", "certs/server_key.pem")
+CLIENT_CERT_PEM = os.getenv("LSM_CI_CLIENT_CERT_PEM", "certs/client_cert.pem")
 
 bindsocket = socket.socket()
 bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

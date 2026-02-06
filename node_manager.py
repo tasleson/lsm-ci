@@ -483,9 +483,11 @@ def rerun_test(auth_param):
         expected_hash = hashlib.sha256(message.encode('utf-8')).hexdigest()
 
         # Compare hashes using constant-time comparison to prevent timing attacks
-        if not hmac.compare_digest(provided_hash.lower(), expected_hash.lower()):
+        if not hmac.compare_digest(provided_hash.lower(),
+                                   expected_hash.lower()):
             response.status = 403
-            _p(f"Invalid SHA256 authentication for test_id {test_id} from {request.remote_addr}")
+            _p(f"Invalid SHA256 authentication for test_id {test_id} from {request.remote_addr}"
+               )
             return "Authentication failed"
 
     except ValueError:
@@ -499,7 +501,8 @@ def rerun_test(auth_param):
     item = work_log.find_by_test_id(test_id)
 
     if item:
-        _p(f"Re-running test: client IP {request.remote_addr}: {test_id} {item}")
+        _p(f"Re-running test: client IP {request.remote_addr}: {test_id} {item}"
+           )
 
         # Atomically get new test_run_id
         item["test_run_id"] = test_count.increment()

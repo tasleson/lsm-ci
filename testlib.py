@@ -36,11 +36,11 @@ LONG_TIMEOUT = int(os.getenv("LSM_CI_LONG_TIMEOUT", str(3 * 60)))
 POLL_TIMEOUT = int(os.getenv("LSM_CI_POLL_TIMEOUT", "1"))
 
 # TLS certificate paths
-CA_CERT = os.getenv("LSM_CI_CA_CERT", "ca.pem")
-CLIENT_CERT = os.getenv("LSM_CI_CLIENT_CERT", "client.crt")
-CLIENT_KEY = os.getenv("LSM_CI_CLIENT_KEY", "client.key")
-SERVER_CERT = os.getenv("LSM_CI_SERVER_CERT", "server.crt")
-SERVER_KEY = os.getenv("LSM_CI_SERVER_KEY", "server.key")
+CA_CERT = os.getenv("LSM_CI_CA_CERT", "certs/ca.pem")
+CLIENT_CERT = os.getenv("LSM_CI_CLIENT_CERT", "certs/client.crt")
+CLIENT_KEY = os.getenv("LSM_CI_CLIENT_KEY", "certs/client.key")
+SERVER_CERT = os.getenv("LSM_CI_SERVER_CERT", "certs/server.crt")
+SERVER_KEY = os.getenv("LSM_CI_SERVER_KEY", "certs/server.key")
 SERVER_HOSTNAME = os.getenv("LSM_CI_SERVER_HOSTNAME", "ci.asleson.org")
 
 hs = os.getenv("LSM_CI_HASH_SALT", "")

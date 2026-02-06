@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-
 """
 Used for testing the service locally
 """
