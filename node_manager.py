@@ -450,35 +450,65 @@ def processing_requests():
     return json.dumps(rc)
 
 
-@route("/rerun/<test_id>")
-def rerun_test(test_id):
+@route("/rerun/<auth_param>")
+def rerun_test(auth_param):
     """
-    Re-runs a test
-    :param test_id:  Test id to re-run.
+    Re-runs a test with SHA256 authentication
+    :param auth_param: Format: sha256=<hex>:<test_id>
+                       where <hex> is SHA256(GIT_SECRET + test_id)
     :return: Appropriate http status code
     """
-    # We are only expecting a number here
+    # Parse the auth_param format: sha256=<hex>:<test_id>
     try:
-        tmp_id = int(test_id)
-    except ValueError as ve:
-        response.status = 404
-        return
+        if not auth_param.startswith("sha256="):
+            response.status = 400
+            return "Invalid format: must start with 'sha256='"
+
+        # Remove "sha256=" prefix
+        param_data = auth_param[7:]  # len("sha256=") == 7
+
+        # Split on the colon to get hash and test_id
+        parts = param_data.split(":", 1)
+        if len(parts) != 2:
+            response.status = 400
+            return "Invalid format: expected sha256=<hex>:<test_id>"
+
+        provided_hash, test_id_str = parts
+
+        # Validate test_id is an integer
+        test_id = int(test_id_str)
+
+        # Compute expected hash: SHA256(GIT_SECRET + test_id)
+        message = GIT_SECRET + test_id_str
+        expected_hash = hashlib.sha256(message.encode('utf-8')).hexdigest()
+
+        # Compare hashes using constant-time comparison to prevent timing attacks
+        if not hmac.compare_digest(provided_hash.lower(), expected_hash.lower()):
+            response.status = 403
+            _p(f"Invalid SHA256 authentication for test_id {test_id} from {request.remote_addr}")
+            return "Authentication failed"
+
+    except ValueError:
+        response.status = 400
+        return "Invalid test_id: must be an integer"
+    except Exception as e:
+        response.status = 400
+        return f"Error parsing auth parameter: {str(e)}"
 
     # Thread-safe lookup in work_log
     item = work_log.find_by_test_id(test_id)
 
     if item:
-        _p(f"Re-running test: client IP {request.remote_addr}: {test_id} {item}"
-           )
+        _p(f"Re-running test: client IP {request.remote_addr}: {test_id} {item}")
 
         # Atomically get new test_run_id
         item["test_run_id"] = test_count.increment()
         req_q.put(item)
         response.status = 200
+        return "Test queued for rerun"
     else:
         response.status = 404
-
-    return
+        return "Test not found"
 
 
 # Return what clients we have connected to us
