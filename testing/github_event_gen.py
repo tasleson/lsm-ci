@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 """
 Used for testing the service locally
 """
@@ -35,7 +37,7 @@ if __name__ == "__main__":
         default="https://github.com/tasleson/libstoragemgmt.git",
     )
 
-    parser.add_argument("--branch", dest="branch", default="master")
+    parser.add_argument("--branch", dest="branch", default="main")
     parser.add_argument(
         "--sha1",
         dest="sha1",
