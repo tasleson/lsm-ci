@@ -31,7 +31,7 @@ def _lcall(command, job_id):
     """
 
     # Write output to a file so we can see what's going on while it's running
-    f = "/tmp/%s.out" % job_id
+    f = f"/tmp/{job_id}.out"
 
     with open(f, "w", buffering=1) as log:  # Max buffer 1 line (text mode)
         exit_value = call(command, stdout=log, stderr=log)
@@ -39,7 +39,7 @@ def _lcall(command, job_id):
 
 
 def _file_name(job_id):
-    base = "%s/%s" % (config["LOGDIR"], job_id)
+    base = f"{config['LOGDIR']}/{job_id}"
     return base + ".out"
 
 
@@ -94,7 +94,7 @@ def _update_state(job_id):
     p = job["PROCESS"]
     p.join(0)
     if not p.is_alive():
-        print("%s exited with %s " % (p.name, str(p.exitcode)))
+        print(f"{p.name} exited with {p.exitcode} ")
         sys.stdout.flush()
 
         if p.exitcode == 0:

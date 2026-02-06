@@ -178,7 +178,7 @@ def _lcall(command, job_id):
     """
 
     # Write output to a file so we can see what's going on while it's running
-    f = "/tmp/%s.out" % job_id
+    f = f"/tmp/{job_id}.out"
 
     with open(f, "w", buffering=1) as log:  # Max buffer 1 line (text mode)
         # shell=False is the default, ensuring no shell interpretation
@@ -202,7 +202,7 @@ def _file_name(job_id, log_dir=None):
             raise
         # EEXIST is expected and fine - directory exists
 
-    base = "%s/%s" % (log_dir, job_id)
+    base = f"{log_dir}/{job_id}"
     return base + ".out"
 
 
@@ -235,8 +235,9 @@ def _run_command(job_id, args, program, log_dir):
         # written out error file, in case we hit a bug
         os.remove(output_file)
     except Exception:
-        testlib.p("job_id = %s cmd = '%s', log_dir = %s, program = %s" %
-                  (job_id, str(cmd), log_dir, program))
+        testlib.p(
+            f"job_id = {job_id} cmd = '{str(cmd)}', log_dir = {log_dir}, program = {program}"
+        )
         testlib.p(str(traceback.format_exc()))
 
     # This is a separate process, lets exit with the same exit code as cmd
@@ -262,23 +263,24 @@ def _load_config():
 
     # Lets make sure import external files/directories are present
     if not os.path.exists(config["PROGRAM"]):
-        testlib.p("config PROGRAM %s does not exist" % config["PROGRAM"])
+        testlib.p(f"config PROGRAM {config['PROGRAM']} does not exist")
         sys.exit(1)
 
     if not (os.path.exists(config["LOGDIR"]) and os.path.isdir(
             config["LOGDIR"]) and os.access(config["LOGDIR"], os.W_OK)):
-        testlib.p("config LOGDIR not preset or not a "
-                  "directory %s or not writeable" % (config["LOGDIR"]))
+        testlib.p(
+            f"config LOGDIR not preset or not a directory {config['LOGDIR']} or not writeable"
+        )
         sys.exit(1)
 
 
 def _remove_file(job_id):
     fn = _file_name(job_id)
     try:
-        testlib.p("Deleting file: %s" % fn)
+        testlib.p(f"Deleting file: {fn}")
         os.remove(fn)
     except IOError as ioe:
-        testlib.p("Error deleting file: %s, reason: %s" % (fn, str(ioe)))
+        testlib.p(f"Error deleting file: {fn}, reason: {ioe}")
         pass
 
 
@@ -384,14 +386,14 @@ class Cmds(object):
 
         # Validate inputs to prevent command injection
         if not Cmds._validate_repo_url(repo):
-            testlib.p("Invalid repo URL rejected: %s" % repo)
+            testlib.p(f"Invalid repo URL rejected: {repo}")
             return "", 400, "Invalid repository URL format"
 
         if not Cmds._validate_branch_name(branch):
-            testlib.p("Invalid branch name rejected: %s" % branch)
+            testlib.p(f"Invalid branch name rejected: {branch}")
             return "", 400, "Invalid branch name format"
 
-        testlib.p("Running test for %s %s %s" % (repo, branch, array_id))
+        testlib.p(f"Running test for {repo} {branch} {array_id}")
 
         if any([x for x in config["ARRAYS"] if x["ID"] == array_id]):
 
@@ -430,7 +432,7 @@ class Cmds(object):
 
             if not jobs.create_job(job_id, job_data):
                 # Extremely unlikely: job_id collision
-                testlib.p("Job ID collision for %s" % job_id)
+                testlib.p(f"Job ID collision for {job_id}")
                 return "", 500, "Failed to create job (ID collision)"
 
             return job_id, 201, ""
@@ -488,7 +490,7 @@ class Cmds(object):
         job_data = jobs.get_job_and_update_status(job_id)
 
         if job_data is None:
-            testlib.p("Job ID %s not found in hash!" % job_id)
+            testlib.p(f"Job ID {job_id} not found in hash!")
             return "", 404, "Job not found"
 
         if job_data["STATUS"] == "RUNNING":
@@ -497,7 +499,7 @@ class Cmds(object):
         # Job is complete, retrieve log file
         log = _file_name(job_id)
         try:
-            testlib.p("Retrieving log file: %s" % log)
+            testlib.p(f"Retrieving log file: {log}")
             with open(log, "r") as foo:
                 result = json.load(foo)
 
@@ -559,7 +561,7 @@ class Cmds(object):
                 return (
                     rc,
                     412,
-                    "File %s contains illegal character" % file_name,
+                    f"File {file_name} contains illegal character",
                 )
 
             full_fn = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -584,7 +586,7 @@ class Cmds(object):
             md5 = i["md5"]
 
             if "/" in fn:
-                return "", 412, "File name has directory sep. in it! %s" % fn
+                return "", 412, f"File name has directory sep. in it! {fn}"
 
             tmp_file = os.path.join(tmp_dir, fn)
 
@@ -592,7 +594,7 @@ class Cmds(object):
                 t.write(data)
 
             if md5 != testlib.file_md5(tmp_file):
-                return "", 412, "md5 miss-match for %s" % tmp_file
+                return "", 412, f"md5 miss-match for {tmp_file}"
 
             src_files.append(tmp_file)
 
@@ -608,12 +610,11 @@ class Cmds(object):
             if os.path.exists(dest_path_name):
                 perms = os.stat(dest_path_name).st_mode & 0o777
 
-            testlib.p("Moving: %s -> %s" % (src_path_name, dest_path_name))
+            testlib.p(f"Moving: {src_path_name} -> {dest_path_name}")
             shutil.move(src_path_name, dest_path_name)
 
             if perms:
-                testlib.p("Setting perms: %s %s" %
-                          (dest_path_name, oct(perms)))
+                testlib.p(f"Setting perms: {dest_path_name} {oct(perms)}")
                 os.chmod(dest_path_name, perms)
 
         return "", 200, ""
@@ -641,7 +642,7 @@ class Cmds(object):
             result = (
                 "",
                 412,
-                "Exception on file update %s " % str(traceback.format_exc()),
+                f"Exception on file update {traceback.format_exc()} ",
             )
 
         # Remove tmp directory and the files we left in it
@@ -705,7 +706,7 @@ if __name__ == "__main__":
         # in user configuration.
         server_addr = servers[connection_count % len(servers)]
 
-        testlib.p("Attempting connection to %s:%d" % (server_addr, port))
+        testlib.p(f"Attempting connection to {server_addr}:{port}")
         NODE = testlib.TestNode(
             server_addr,
             port,
@@ -716,7 +717,7 @@ if __name__ == "__main__":
         )
 
         if NODE.connect():
-            testlib.p("Connected to %s" % server_addr)
+            testlib.p(f"Connected to {server_addr}")
             have_connected = True
             # noinspection PyBroadException
             try:

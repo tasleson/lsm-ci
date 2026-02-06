@@ -98,7 +98,7 @@ ERROR_LOG_DIR = os.getenv("CI_LOG_DIR", "/tmp/ci_log")
 
 # Where to find the logs, this is the url in the github status update when
 # we have an error
-CI_SERVICE_URL = os.getenv("CI_URL", "http://%s:%s/log" % (HOST, PORT))
+CI_SERVICE_URL = os.getenv("CI_URL", f"http://{HOST}:{PORT}/log")
 
 # The file with trusted repos in it
 TRUSTED_REPO_FN = os.getenv("TRUSTED_REPOS", "")
@@ -135,15 +135,14 @@ def _post_with_retries(url, data, auth):
             r = requests.post(url, auth=auth, json=data)
             return r
         except requests.ConnectionError as ce:
-            _p("ConnectionError to (post) %s : message(%s)" % (url, str(ce)))
+            _p(f"ConnectionError to (post) {url} : message({ce})")
             _p("Trying again in 1 second")
             time.sleep(1)
 
 
 def _print_error(req, msg):
     formatted_json = pp.pformat(req.json())
-    _p("%s status code = %d, \nJSON: \n%s\n" %
-       (msg, req.status_code, formatted_json))
+    _p(f"{msg} status code = {req.status_code}, \nJSON: \n{formatted_json}\n")
 
 
 def _log_write(node, job_id):
@@ -175,7 +174,7 @@ def _log_read(fn):
                     out += "**** Line omitted as it contains a password ****\n"
             return out
         except Exception as e:
-            _p("_log_read error: %s" % str(e))
+            _p(f"_log_read error: {e}")
             pass
     return None
 
@@ -184,9 +183,9 @@ def _log_read(fn):
 def _create_status(repo, sha1, state, desc, context, log_url=None):
 
     if "/" not in repo:
-        raise Exception("Expecting repo to be in form user/repo %s" % repo)
+        raise Exception(f"Expecting repo to be in form user/repo {repo}")
 
-    url = "https://api.github.com/repos/%s/statuses/%s" % (repo, sha1)
+    url = f"https://api.github.com/repos/{repo}/statuses/{sha1}"
     data = {"state": state, "description": desc, "context": context}
 
     if log_url:
@@ -195,15 +194,14 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
     if POST_STATUS:
         r = _post_with_retries(url, data, (USER, TOKEN))
         if r.status_code == 201:
-            _p("We updated status url=%s data=%s" % (str(url), str(data)))
+            _p(f"We updated status url={url} data={data}")
         else:
             _print_error(
                 r,
-                "Unexpected error on setting status url=%s data=%s " %
-                (str(url), str(data)),
+                f"Unexpected error on setting status url={url} data={data} ",
             )
     else:
-        _p("NOT POSTED: updated status url=%s data=%s" % (str(url), str(data)))
+        _p(f"NOT POSTED: updated status url={url} data={data}")
 
 
 def trusted_repo(info):
@@ -250,7 +248,7 @@ def trusted_repo(info):
                 "CI permissions",
             )
     except Exception as e:
-        _p("Unable to retrieve trusted repo list! %s" % str(e))
+        _p(f"Unable to retrieve trusted repo list! {e}")
         _create_status(
             info["repo"],
             info["sha"],
@@ -305,11 +303,7 @@ def run_tests(info):
                 info["repo"],
                 info["sha"],
                 "pending",
-                "Plugin = %s started @ %s" % (
-                    a[1],
-                    datetime.datetime.fromtimestamp(
-                        time.time()).strftime("%m/%d %H:%M:%S"),
-                ),
+                f"Plugin = {a[1]} started @ {datetime.datetime.fromtimestamp(time.time()).strftime('%m/%d %H:%M:%S')}",
                 a[0],
             )
 
@@ -321,7 +315,7 @@ def run_tests(info):
         for a in n.arrays():
             job = n.start_test(info["clone"], info["branch"], a[0])
             if job:
-                _p("Test started for %s job = %s" % (a[0], job))
+                _p(f"Test started for {a[0]} job = {job}")
             else:
                 _create_status(
                     info["repo"],
@@ -362,7 +356,7 @@ def run_tests(info):
 
                         info["status"] = "SUCCESS"
                     else:
-                        url = "%s/%s.html" % (CI_SERVICE_URL, job_id)
+                        url = f"{CI_SERVICE_URL}/{job_id}.html"
                         info["status"] = url
                         # Fetch the error log, log error data and status
                         _log_write(n, job_id)
@@ -422,7 +416,7 @@ def request_queue():
             pass
         except Exception:
             st = traceback.format_exc()
-            _p("request_queue: unexpected exception: %s" % st)
+            _p(f"request_queue: unexpected exception: {st}")
 
     _p("Exiting request_queue")
 
@@ -474,8 +468,8 @@ def rerun_test(test_id):
     item = work_log.find_by_test_id(test_id)
 
     if item:
-        _p("Re-running test: client IP %s: %s %s" %
-           (request.remote_addr, str(test_id), str(item)))
+        _p(f"Re-running test: client IP {request.remote_addr}: {test_id} {item}"
+           )
 
         # Atomically get new test_run_id
         item["test_run_id"] = test_count.increment()
@@ -573,7 +567,7 @@ def e_handler():
         sha = request.json["pull_request"]["head"]["sha"]
         branch = request.json["pull_request"]["head"]["ref"]
 
-        _p("Queuing unit tests for %s %s" % (clone, branch))
+        _p(f"Queuing unit tests for {clone} {branch}")
 
         # Atomically get and increment test count
         current_test_id = test_count.increment()
@@ -592,14 +586,14 @@ def e_handler():
             info["repo"],
             info["sha"],
             "pending",
-            "CI requested, #waiting = %d" % req_q.qsize(),
+            f"CI requested, #waiting = {req_q.qsize()}",
             "CI permissions",
         )
         req_q.put(info)
     else:
         _p("Got an unexpected header from github")
         for k, v in request.headers.items():
-            _p("%s:%s" % (str(k), str(v)))
+            _p(f"{k}:{v}")
         pp.pprint(request.json)
         sys.stdout.flush()
 

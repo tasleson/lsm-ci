@@ -168,7 +168,7 @@ class Transport(object):
         payload_len, signature = int(hdr[:10]), hdr[10:]
 
         if payload_len > 2**28:
-            raise IOError("Payload len too large %d" % payload_len)
+            raise IOError(f"Payload len too large {payload_len}")
 
         payload = self._read_all(payload_len)
 
@@ -191,11 +191,7 @@ class Transport(object):
         serialized_msg = msg.serialize()
         digest = md5(serialized_msg)
 
-        to_send = "%s%s%s" % (
-            str.zfill(str(len(serialized_msg)), 10),
-            digest,
-            serialized_msg,
-        )
+        to_send = f"{str(len(serialized_msg)).zfill(10)}{digest}{serialized_msg}"
         self.s.sendall(bytes(to_send.encode("utf-8")))
 
 
@@ -212,7 +208,7 @@ def p(msg):
         tid = ctypes.CDLL("libc.so.6").syscall(224)
         ts = datetime.datetime.fromtimestamp(
             time.time()).strftime("%Y-%m-%d %H:%M:%S.%f")
-        print("%s: %d:%d- %s" % (ts, os.getpid(), tid, msg))
+        print(f"{ts}: {os.getpid()}:{tid}- {msg}")
         sys.stdout.flush()
 
 
@@ -265,11 +261,8 @@ class TestNode(object):
             self.s.settimeout(3 * 60)
 
             if self.use_proxy:
-                p("Using proxy %s:%s" % (self.proxy_host, self.proxy_port))
-                proxy_msg = "CONNECT %s:%s HTTP/1.1\r\n\r\n" % (
-                    self.server_ip,
-                    self.port,
-                )
+                p(f"Using proxy {self.proxy_host}:{self.proxy_port}")
+                proxy_msg = f"CONNECT {self.server_ip}:{self.port} HTTP/1.1\r\n\r\n"
                 self.s.connect((self.proxy_host, self.proxy_port))
                 self.s.sendall(proxy_msg.encode("utf-8"))
                 response = self.s.recv(8192)
@@ -290,7 +283,7 @@ class TestNode(object):
 
             # Always enforce hostname verification for security
             # NOTE: For local testing, ensure certificates have correct hostnames
-            p("server ip = %s" % self.server_ip)
+            p(f"server ip = {self.server_ip}")
 
             self.s = context.wrap_socket(self.s,
                                          server_hostname=SERVER_HOSTNAME)
@@ -303,7 +296,7 @@ class TestNode(object):
             self.t = Transport(self.s)
         except Exception as e:
             # Log the error
-            p("connect exception: %s" % str(e))
+            p(f"connect exception: {e}")
             _try_close(self.s)
             return False
 
@@ -378,8 +371,7 @@ class Node(object):
         """
         if self._state != value:
             if value == Node.UNUSABLE:
-                p("Node %s:%d now unavailable!" %
-                  (self.client_ip, self.client_port))
+                p(f"Node {self.client_ip}:{self.client_port} now unavailable!")
         self._state = value
 
     def close(self):
@@ -442,7 +434,7 @@ class Node(object):
             if resp and resp.ec == 200:
                 return sorted(resp.result)
 
-            p("Error when calling 'arrays' %s" % str(resp))
+            p(f"Error when calling 'arrays' {resp}")
             return None
 
     def increase_tmo(self):
@@ -475,7 +467,7 @@ class Node(object):
                 # "PLUGIN": "sim"}]
                 return resp.result
             else:
-                p("Error when getting array list %s" % str(resp))
+                p(f"Error when getting array list {resp}")
 
             return []
 
@@ -503,8 +495,7 @@ class Node(object):
                 return output
 
             if resp:
-                p("Error: job_completion id = %s resp = %s" %
-                  (job_id, str(resp)))
+                p(f"Error: job_completion id = {job_id} resp = {resp}")
             else:
                 p("Error: job_completion, no response!")
             return None
@@ -518,10 +509,9 @@ class Node(object):
         with self.lock:
             resp = self._rpc("job_delete", (job_id, ))
             if resp and resp.ec != 200:
-                p("Error: Unable to delete job id = %s resp = %s" %
-                  (job_id, str(resp)))
+                p(f"Error: Unable to delete job id = {job_id} resp = {resp}")
             else:
-                p("Job %s deleted!" % job_id)
+                p(f"Job {job_id} deleted!")
 
     def start_test(self, clone_url, branch, array_id):
         """
@@ -536,7 +526,7 @@ class Node(object):
             if resp and resp.ec == 201:
                 return resp.result
             else:
-                p("Error: when creating job: %s" % str(resp))
+                p(f"Error: when creating job: {resp}")
             return None
 
     def get_file_md5(self, file_list):
@@ -550,7 +540,7 @@ class Node(object):
             if resp and resp.ec == 200:
                 return resp.result
             else:
-                p("Error when retrieving md5sums %s" % str(resp))
+                p(f"Error when retrieving md5sums {resp}")
             return None
 
     def update_files(self, file_list):
@@ -571,7 +561,7 @@ class Node(object):
         if resp and resp.ec == 200:
             return True
 
-        p("Error when updating files! %s" % str(resp))
+        p(f"Error when updating files! {resp}")
         return False
 
     def restart(self):
@@ -684,8 +674,8 @@ class NodeManager(object):
                                                       node_mgr.port)
         except:
             p(str(traceback.format_exc()))
-            p("Unable to setup listening socket (%s:%d), shutting down" %
-              (node_mgr.ip, node_mgr.port))
+            p(f"Unable to setup listening socket ({node_mgr.ip}:{node_mgr.port}), shutting down"
+              )
             RUN.value = 0
             os.kill(os.getpid(), signal.SIGINT)
 
@@ -724,17 +714,14 @@ class NodeManager(object):
                         arrays = nc.arrays()
                         if arrays is None:
                             nc.close()
-                            p("Node has no configured arrays, rejecting %s" %
-                              str(from_addr))
+                            p(f"Node has no configured arrays, rejecting {from_addr}"
+                              )
                             continue
 
                         # We have a well-behaved client, increase timeouts
                         nc.increase_tmo()
 
-                        msg = "Accepted a connection from %s: arrays= %s" % (
-                            str(from_addr),
-                            str(arrays),
-                        )
+                        msg = f"Accepted a connection from {from_addr}: arrays= {arrays}"
 
                         client_id = NodeManager._client_id(
                             from_addr[0], arrays)
@@ -748,11 +735,10 @@ class NodeManager(object):
                         # and the network goes down/up etc.
                         with node_mgr.lock:
                             if client_id in node_mgr.known_clients:
-                                p("%s: previously known %s" % (msg, client_id))
+                                p(f"{msg}: previously known {client_id}")
                                 node_mgr.known_clients[client_id].replace(nc)
                             else:
-                                p("%s: new client connection %s" %
-                                  (msg, client_id))
+                                p(f"{msg}: new client connection {client_id}")
                                 node_mgr.known_clients[client_id] = nc
 
                         NodeManager.check_for_updates(nc)
@@ -776,14 +762,13 @@ class NodeManager(object):
             except BrokenPipeError as e:
                 _try_close(connection)
                 _try_close(new_socket)
-                p("%s - %s" % (str(e), str(from_addr)))
+                p(f"{e} - {from_addr}")
             except ssl.SSLError as ssle:
                 # We get these errors when someone port scan and tries to
                 # connect
                 _try_close(connection)
                 _try_close(new_socket)
-                p("SSL error: Rejecting %s for %s" %
-                  (str(from_addr), str(ssle)))
+                p(f"SSL error: Rejecting {from_addr} for {ssle}")
             except:
                 p(str(traceback.format_exc()))
                 _try_close(connection)
@@ -814,8 +799,8 @@ class NodeManager(object):
                 p("Updating client!")
                 for i, fn in enumerate(files):
                     if local_signatures[i] != remote_signatures[i]:
-                        p("File %s local= %s remote= %s" %
-                          (fn, local_signatures[i], remote_signatures[i]))
+                        p(f"File {fn} local= {local_signatures[i]} remote= {remote_signatures[i]}"
+                          )
 
                 if node.update_files(files):
                     remote_signatures = node.get_file_md5(files)

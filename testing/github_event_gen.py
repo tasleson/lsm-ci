@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    url = "http://%s:%s/event_handler" % (IP_ADDRESS, PORT_NUM)
+    url = f"http://{IP_ADDRESS}:{PORT_NUM}/event_handler"
 
     head = {
         "Content-type": "application/json",
@@ -75,4 +75,4 @@ if __name__ == "__main__":
                              headers=head,
                              data=body_json.encode("utf-8"))
 
-    print("status = %d" % int(response.status_code))
+    print(f"status = {int(response.status_code)}")

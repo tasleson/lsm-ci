@@ -24,7 +24,7 @@ while True:
 
     print("Waiting for a client...")
     new_socket, from_addr = bindsocket.accept()
-    print("Accepted a connection from %s" % str(from_addr))
+    print(f"Accepted a connection from {from_addr}")
 
     connection = ssl.wrap_socket(
         new_socket,

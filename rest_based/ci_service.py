@@ -43,7 +43,7 @@ ERROR_LOG_DIR = os.getenv("CI_LOG_DIR", "/tmp/ci_log")
 
 # Where to find the logs, this is the url in the github status update when
 # we have an error
-CI_SERVICE_URL = os.getenv("CI_URL", "http://%s:%s/log" % (HOST, PORT))
+CI_SERVICE_URL = os.getenv("CI_URL", f"http://{HOST}:{PORT}/log")
 
 # Global process list
 processes = []
@@ -55,8 +55,7 @@ def _request_with_retries(url):
             r = requests.get(url, auth=(SNIA_USER, SNIA_TOKEN))
             return r
         except requests.ConnectionError as ce:
-            _p("ConnectionError to (GET) %s : message(%s)" %
-               (SNIA_URL, str(ce)))
+            _p(f"ConnectionError to (GET) {SNIA_URL} : message({ce})")
             _p("Trying again in 1 second")
             time.sleep(1)
 
@@ -67,8 +66,7 @@ def _post_with_retries(url, data, auth):
             r = requests.post(url, auth=auth, json=data)
             return r
         except requests.ConnectionError as ce:
-            _p("ConnectionError to (post) %s : message(%s)" %
-               (SNIA_URL, str(ce)))
+            _p(f"ConnectionError to (post) {SNIA_URL} : message({ce})")
             _p("Trying again in 1 second")
             time.sleep(1)
 
@@ -88,7 +86,7 @@ def _arrays_running():
 
 
 def _print_error(req, msg):
-    _p("%s status code = %d" % (msg, req.status_code))
+    _p(f"{msg} status code = {req.status_code}")
     pp.pprint(req.json())
     sys.stdout.flush()
 
@@ -107,7 +105,7 @@ def _array_start(clone_url, branch, array_id):
 
 
 def _log_write(job_id):
-    url = "%s/log/%s" % (SNIA_URL, job_id)
+    url = f"{SNIA_URL}/log/{job_id}"
     r = _request_with_retries(url)
     if r.status_code == 200:
         data = r.json()["OUTPUT"]
@@ -140,7 +138,7 @@ def _jobs():
 
 
 def _job_delete(job_id):
-    url = "%s/test/%s" % (SNIA_URL, job_id)
+    url = f"{SNIA_URL}/test/{job_id}"
     r = requests.delete(url, auth=(SNIA_USER, SNIA_TOKEN))
     if r.status_code != 200:
         _print_error(r, "Unexpected error on delete ")
@@ -149,9 +147,9 @@ def _job_delete(job_id):
 # Note: A context is used to distinguish different origins of status
 def _create_status(repo, sha1, state, desc, context, log_url=None):
     if "/" not in repo:
-        raise Exception("Expecting repo to be in form user/repo %s" % repo)
+        raise Exception(f"Expecting repo to be in form user/repo {repo}")
 
-    url = "https://api.github.com/repos/%s/statuses/%s" % (repo, sha1)
+    url = f"https://api.github.com/repos/{repo}/statuses/{sha1}"
     data = {"state": state, "description": desc, "context": context}
 
     if log_url:
@@ -159,14 +157,14 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
 
     r = _post_with_retries(url, data, (HOST, TOKEN))
     if r.status_code == 201:
-        _p("We updated status %s" % str(data))
+        _p(f"We updated status {data}")
     else:
         _print_error(r, "Unexpected error on setting status ")
 
 
 def _run_tests(info):
     jobs = {}
-    _p("Task running! %d" % os.getpid())
+    _p(f"Task running! {os.getpid()}")
 
     # Connect to the various lab(s) and kick off builds for each of the
     # available plugins
@@ -178,11 +176,7 @@ def _run_tests(info):
             info["repo"],
             info["sha"],
             "pending",
-            "Plugin = %s started @ %s" % (
-                a[1],
-                datetime.datetime.fromtimestamp(
-                    time.time()).strftime("%m/%d %H:%M:%S"),
-            ),
+            f"Plugin = {a[1]} started @ {datetime.datetime.fromtimestamp(time.time()).strftime('%m/%d %H:%M:%S')}",
             a[0],
         )
 
@@ -221,7 +215,7 @@ def _run_tests(info):
     # Report status on each of them
     job_list = _jobs()
 
-    _p("Tests done, jobs = %s" % str(job_list))
+    _p(f"Tests done, jobs = {job_list}")
 
     for r in job_list:
         job_id = r["JOB_ID"]
@@ -246,7 +240,7 @@ def _run_tests(info):
                 "failure",
                 "Plugin = " + plugin,
                 array_id,
-                "%s/%s.html" % (CI_SERVICE_URL, job_id),
+                f"{CI_SERVICE_URL}/{job_id}.html",
             )
 
         # Delete the jobs
@@ -305,7 +299,7 @@ def _clean_process_list():
     for p in processes:
         p.join(0)
         if not p.is_alive():
-            _p("%s exited with %s " % (p.name, str(p.exitcode)))
+            _p(f"{p.name} exited with {p.exitcode} ")
             to_remove.append(p)
 
     for r in to_remove:
@@ -315,7 +309,7 @@ def _clean_process_list():
 def _p(msg):
     ts = datetime.datetime.fromtimestamp(
         time.time()).strftime("%Y-%m-%d %H:%M:%S")
-    print("%s:%d:%s" % (ts, os.getpid(), msg))
+    print(f"{ts}:{os.getpid()}:{msg}")
     sys.stdout.flush()
 
 
@@ -349,7 +343,7 @@ def e_handler():
         sha = request.json["pull_request"]["head"]["sha"]
         branch = request.json["pull_request"]["head"]["ref"]
 
-        _p("Running unit tests for %s %s" % (clone, branch))
+        _p(f"Running unit tests for {clone} {branch}")
 
         info = dict(repo=repo, sha=sha, branch=branch, clone=clone)
 
@@ -361,7 +355,7 @@ def e_handler():
     else:
         _p("Got an unexpected header from github")
         for k, v in request.headers.items():
-            _p("%s:%s" % (str(k), str(v)))
+            _p(f"{k}:{v}")
         pp.pprint(request.json)
         sys.stdout.flush()
 

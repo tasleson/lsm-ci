@@ -13,8 +13,10 @@ PORT_NUM_PEER_SSL = int(os.getenv("PORT_NUM_PEER_SSL", "443"))
 IP_ADDRESS = os.getenv("IP_ADDRESS", "127.0.0.1")
 
 # TLS certificate paths
-WRONG_SERVER_CERT = os.getenv("LSM_CI_WRONG_SERVER_CERT", "wrong_server_cert.pem")
-WRONG_CLIENT_CERT = os.getenv("LSM_CI_WRONG_CLIENT_CERT", "wrong_client_cert.pem")
+WRONG_SERVER_CERT = os.getenv("LSM_CI_WRONG_SERVER_CERT",
+                              "wrong_server_cert.pem")
+WRONG_CLIENT_CERT = os.getenv("LSM_CI_WRONG_CLIENT_CERT",
+                              "wrong_client_cert.pem")
 WRONG_CLIENT_KEY = os.getenv("LSM_CI_WRONG_CLIENT_KEY", "wrong_client_key.pem")
 
 SERVER_CERT_PEM = os.getenv("LSM_CI_SERVER_CERT_PEM", "server_cert.pem")
@@ -35,7 +37,7 @@ def failing_ssl():
         print("failing_ssl: connected")
         ssl_sock.close()
     except Exception as e:
-        print("failing_ssl: %s" % str(e))
+        print(f"failing_ssl: {e}")
 
     time.sleep(0.2)
 
@@ -61,7 +63,7 @@ def invalid_ssl_cert():
         time.sleep(3)
         ssl_sock.close()
     except Exception as e:
-        print("invalid_ssl_cert: %s" % str(e))
+        print(f"invalid_ssl_cert: {e}")
 
     time.sleep(0.2)
 
@@ -87,7 +89,7 @@ def valid_ssl_cert():
         time.sleep(5)
         ssl_sock.close()
     except Exception as e:
-        print("valid_ssl_cert: %s" % str(e))
+        print(f"valid_ssl_cert: {e}")
 
     time.sleep(0.2)
 
@@ -108,22 +110,22 @@ def open_write():
         print("open_write: connected->written")
         s.close()
     except Exception as e:
-        print("open_write: %s" % str(e))
+        print(f"open_write: {e}")
 
     time.sleep(0.2)
 
 
 def uri_control(path):
-    return "http://%s:%d/%s" % (IP_ADDRESS, PORT_NUM_CONTROL, path)
+    return f"http://{IP_ADDRESS}:{PORT_NUM_CONTROL}/{path}"
 
 
 def gets():
 
     for n in ["nodes", "stats", "queue", "processing", "completed"]:
         uri = uri_control(n)
-        print("uri = %s" % uri)
+        print(f"uri = {uri}")
         response = requests.get(url=uri)
-        print("status code = %d" % response.status_code)
+        print(f"status code = {response.status_code}")
         print(response.text)
 
 
