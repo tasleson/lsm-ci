@@ -26,6 +26,15 @@ import signal
 # What port the clients will try to connect to
 PORT = int(os.getenv("LSM_CI_CLIENT_PORT", 443))
 
+# Timeout for initial connection validation (seconds)
+INITIAL_TIMEOUT = int(os.getenv("LSM_CI_INITIAL_TIMEOUT", "1"))
+
+# Timeout for authenticated client operations (seconds)
+LONG_TIMEOUT = int(os.getenv("LSM_CI_LONG_TIMEOUT", str(3 * 60)))
+
+# Timeout for polling operations (select, queue get, etc.) in seconds
+POLL_TIMEOUT = int(os.getenv("LSM_CI_POLL_TIMEOUT", "1"))
+
 # TLS certificate paths
 CA_CERT = os.getenv("LSM_CI_CA_CERT", "ca.pem")
 CLIENT_CERT = os.getenv("LSM_CI_CLIENT_CERT", "client.crt")
@@ -257,7 +266,7 @@ class TestNode(object):
             # We have pings that are happening every 15 seconds, lets wait
             # for up to 3 minutes waiting for one, otherwise we will error out
             # with a timeout on the read.
-            self.s.settimeout(3 * 60)
+            self.s.settimeout(LONG_TIMEOUT)
 
             if self.use_proxy:
                 p(f"Using proxy {self.proxy_host}:{self.proxy_port}")
@@ -444,7 +453,7 @@ class Node(object):
         # If we get here we have an authenticated client that is
         # responding so we will give it more time to avoid timeouts
         with self.lock:
-            self.s.settimeout(3 * 60)
+            self.s.settimeout(LONG_TIMEOUT)
 
     def arrays_running(self):
         """
@@ -688,7 +697,8 @@ class NodeManager(object):
 
             # noinspection PyBroadException
             try:
-                ready = select.select([bindsocket], [], [bindsocket], 15)
+                ready = select.select([bindsocket], [], [bindsocket],
+                                      POLL_TIMEOUT)
 
                 if len(ready[2]):
                     p("Error on listening socket, re-creating...")
@@ -707,7 +717,7 @@ class NodeManager(object):
 
                         # Set a fairly short timeout, so badly behaving clients
                         # don't muck things up.
-                        connection.settimeout(1)
+                        connection.settimeout(INITIAL_TIMEOUT)
 
                         nc = Node(connection, from_addr)
                         arrays = nc.arrays()

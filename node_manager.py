@@ -403,7 +403,7 @@ def request_queue():
 
         # noinspection PyBroadException
         try:
-            info = req_q.get(True, 3)
+            info = req_q.get(True, testlib.POLL_TIMEOUT)
 
             with processing_mutex:
                 processing = info
