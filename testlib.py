@@ -645,7 +645,7 @@ class NodeManager(object):
         # to be free again
         bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         bindsocket.bind((ip, port))
-        bindsocket.listen(5)
+        bindsocket.listen(25)
 
         return bindsocket
 
