@@ -16,20 +16,13 @@ import sys
 import datetime
 import testlib
 import errno
-
-try:
-    # noinspection PyUnresolvedReferences,PyCompatibility
-    import Queue
-except ImportError:
-    # noinspection PyUnresolvedReferences,PyCompatibility,PyPep8Naming
-    import queue as Queue
+import queue as Queue
 
 import traceback
 from testlib import p as _p
 import re
 from collections import deque
 import json
-import copy
 import yaml
 
 pp = pprint.PrettyPrinter(depth=4)
