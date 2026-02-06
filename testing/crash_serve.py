@@ -12,6 +12,15 @@ PORT_NUM_CONTROL = int(os.getenv("PORT_NUM_CONTROL", "43301"))
 PORT_NUM_PEER_SSL = int(os.getenv("PORT_NUM_PEER_SSL", "443"))
 IP_ADDRESS = os.getenv("IP_ADDRESS", "127.0.0.1")
 
+# TLS certificate paths
+WRONG_SERVER_CERT = os.getenv("LSM_CI_WRONG_SERVER_CERT", "wrong_server_cert.pem")
+WRONG_CLIENT_CERT = os.getenv("LSM_CI_WRONG_CLIENT_CERT", "wrong_client_cert.pem")
+WRONG_CLIENT_KEY = os.getenv("LSM_CI_WRONG_CLIENT_KEY", "wrong_client_key.pem")
+
+SERVER_CERT_PEM = os.getenv("LSM_CI_SERVER_CERT_PEM", "server_cert.pem")
+CLIENT_CERT_PEM = os.getenv("LSM_CI_CLIENT_CERT_PEM", "client_cert.pem")
+CLIENT_KEY_PEM = os.getenv("LSM_CI_CLIENT_KEY_PEM", "client_key.pem")
+
 
 def failing_ssl():
     """
@@ -41,10 +50,10 @@ def invalid_ssl_cert():
         print("Created socket!")
         ssl_sock = ssl.wrap_socket(
             s,
-            ca_certs="wrong_server_cert.pem",
+            ca_certs=WRONG_SERVER_CERT,
             cert_reqs=ssl.CERT_REQUIRED,
-            certfile="wrong_client_cert.pem",
-            keyfile="wrong_client_key.pem",
+            certfile=WRONG_CLIENT_CERT,
+            keyfile=WRONG_CLIENT_KEY,
         )
         print("Have ssl_sock!")
         ssl_sock.connect((IP_ADDRESS, PORT_NUM_PEER_SSL))
@@ -67,10 +76,10 @@ def valid_ssl_cert():
         print("Created socket!")
         ssl_sock = ssl.wrap_socket(
             s,
-            ca_certs="server_cert.pem",
+            ca_certs=SERVER_CERT_PEM,
             cert_reqs=ssl.CERT_REQUIRED,
-            certfile="client_cert.pem",
-            keyfile="client_key.pem",
+            certfile=CLIENT_CERT_PEM,
+            keyfile=CLIENT_KEY_PEM,
         )
         print("Have ssl_sock!")
         ssl_sock.connect((IP_ADDRESS, PORT_NUM_PEER_SSL))

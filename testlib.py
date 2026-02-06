@@ -27,6 +27,14 @@ import signal
 # What port the clients will try to connect to
 PORT = int(os.getenv("LSM_CI_CLIENT_PORT", 443))
 
+# TLS certificate paths
+CA_CERT = os.getenv("LSM_CI_CA_CERT", "ca.pem")
+CLIENT_CERT = os.getenv("LSM_CI_CLIENT_CERT", "client.crt")
+CLIENT_KEY = os.getenv("LSM_CI_CLIENT_KEY", "client.key")
+SERVER_CERT = os.getenv("LSM_CI_SERVER_CERT", "server.crt")
+SERVER_KEY = os.getenv("LSM_CI_SERVER_KEY", "server.key")
+SERVER_HOSTNAME = os.getenv("LSM_CI_SERVER_HOSTNAME", "ci.asleson.org")
+
 hs = os.getenv("LSM_CI_HASH_SALT", "")
 
 RUN = multiprocessing.Value("i", 1)
@@ -272,12 +280,12 @@ class TestNode(object):
 
             context = ssl.create_default_context(
                 ssl.Purpose.SERVER_AUTH,
-                cafile="ca.pem",
+                cafile=CA_CERT,
             )
 
             context.load_cert_chain(
-                certfile="client.crt",
-                keyfile="client.key",
+                certfile=CLIENT_CERT,
+                keyfile=CLIENT_KEY,
             )
 
             # Always enforce hostname verification for security
@@ -285,7 +293,7 @@ class TestNode(object):
             p("server ip = %s" % self.server_ip)
 
             self.s = context.wrap_socket(self.s,
-                                         server_hostname="ci.asleson.org")
+                                         server_hostname=SERVER_HOSTNAME)
 
             if self.use_proxy:
                 self.s.do_handshake()
@@ -649,11 +657,11 @@ class NodeManager(object):
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
 
         context.load_cert_chain(
-            certfile="server.crt",
-            keyfile="server.key",
+            certfile=SERVER_CERT,
+            keyfile=SERVER_KEY,
         )
 
-        context.load_verify_locations(cafile="ca.pem")
+        context.load_verify_locations(cafile=CA_CERT)
         context.verify_mode = ssl.CERT_REQUIRED
         return context
 

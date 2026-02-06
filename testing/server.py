@@ -8,6 +8,12 @@ import ssl
 import testlib
 import traceback
 import sys
+import os
+
+# TLS certificate paths
+SERVER_CERT_PEM = os.getenv("LSM_CI_SERVER_CERT_PEM", "server_cert.pem")
+SERVER_KEY_PEM = os.getenv("LSM_CI_SERVER_KEY_PEM", "server_key.pem")
+CLIENT_CERT_PEM = os.getenv("LSM_CI_CLIENT_CERT_PEM", "client_cert.pem")
 
 bindsocket = socket.socket()
 bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -23,9 +29,9 @@ while True:
     connection = ssl.wrap_socket(
         new_socket,
         server_side=True,
-        certfile="server_cert.pem",
-        keyfile="server_key.pem",
-        ca_certs="client_cert.pem",
+        certfile=SERVER_CERT_PEM,
+        keyfile=SERVER_KEY_PEM,
+        ca_certs=CLIENT_CERT_PEM,
         cert_reqs=ssl.CERT_REQUIRED,
     )
 

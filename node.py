@@ -695,7 +695,7 @@ if __name__ == "__main__":
     proxy_host = config["PROXY_HOST"]
     proxy_port = config["PROXY_PORT"]
 
-    servers = [server, "ci.asleson.org"]
+    servers = [server, testlib.SERVER_HOSTNAME]
     connection_count = 0
 
     # Connect to server
