@@ -48,7 +48,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 # a compromised server from pushing malicious code.
 # PRODUCTION: Replace this with your production public key (generated offline)
 # For initial testing, we use the test key
-CODE_SIGNING_PUBLIC_KEY = "cd8815f6f0c6c10debc670722401c1c5bdd39e72bb96b388410886d9fb7d62d4"
+CODE_SIGNING_PUBLIC_KEY = "6c48b7d8ad38285530346cbe7f633a54c6700b9bf2bb18843f1849bc19491b8a"
 
 # Development mode: set LSM_CI_DEV_MODE=1 to bypass signature verification
 # Useful for rapid development/testing. NEVER use in production!
