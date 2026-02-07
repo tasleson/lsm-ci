@@ -1,5 +1,5 @@
-# lsm-ci
-Github continuous integration service for libStorageMgmt
+
+![lsm-ci_sm](https://github.com/user-attachments/assets/2e3c50e3-da5e-40dc-9cf1-b58f9ab09650)
 
 This service is based on the information available from: https://developer.github.com/guides/building-a-ci-server/ except that it's written in python instead of ruby.  These examples use http://bottlepy.org and http://www.python-requests.org
 
