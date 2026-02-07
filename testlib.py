@@ -49,6 +49,14 @@ hs = os.getenv("LSM_CI_HASH_SALT", "")
 # and disable client updates. Useful for rapid development/testing. NEVER use in production!
 DEV_MODE = os.getenv("LSM_CI_DEV_MODE", "") == "1"
 
+# Trusted repository configuration
+TRUSTED_REPO_FN = os.getenv("TRUSTED_REPOS", "")
+TRUSTED_REPO_REMOTE = os.getenv(
+    "TRUSTED_REPOS_REMOTE",
+    "https://raw.githubusercontent.com/" +
+    "libstorage/libstoragemgmt/master/test/trusted.yaml",
+)
+
 RUN = multiprocessing.Value("i", 1)
 
 print_lock = threading.Lock()
@@ -89,6 +97,46 @@ def sha256(t):
     h.update(t.encode("utf-8"))
     h.update(hs.encode("utf-8"))
     return h.hexdigest()
+
+
+def get_trusted_repos():
+    """
+    Fetch the list of trusted repositories.
+
+    Tries to fetch from the remote URL first, falls back to local file.
+    This is a security-critical function used to prevent execution of
+    untrusted code.
+
+    We are opening the file each time, so we can update it without restarting
+    the service.
+
+    :return: List of trusted repo URLs, or None on error
+    """
+    import requests
+    import yaml
+
+    trusted = {}
+
+    try:
+        result = requests.get(TRUSTED_REPO_REMOTE)
+
+        if result.status_code == 200:
+            p("Using github repo trusted file.")
+            trusted = yaml.safe_load(result.text)
+        else:
+            if os.path.exists(TRUSTED_REPO_FN) and os.path.isfile(
+                    TRUSTED_REPO_FN):
+                with open(TRUSTED_REPO_FN, "r") as tdata:
+                    trusted = yaml.safe_load(tdata.read())
+
+        if "REPOS" in trusted:
+            return trusted["REPOS"]
+        else:
+            p("Trusted repo file missing 'REPOS' key")
+            return None
+    except Exception as e:
+        p(f"Unable to retrieve trusted repo list! {e}")
+        return None
 
 
 class Request(object):

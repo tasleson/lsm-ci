@@ -213,54 +213,53 @@ def trusted_repo(info):
     Determine if we trust a repo.
 
     We are opening the file each time, so we can update it without restarting
-    # the service.
+    the service.
     :param info:  Information about what is to be tested
     :return: True/False
     """
 
-    trusted = {}
-
-    # Lets fetch the file from the master repo if it exists, otherwise we will
-    # use our local copy.
     try:
-        result = requests.get(TRUSTED_REPO_REMOTE)
-
-        if result.status_code == 200:
-            _p("Using github repo trusted file.")
-            trusted = yaml.safe_load(result.text)
-        else:
-            if os.path.exists(TRUSTED_REPO_FN) and os.path.isfile(
-                    TRUSTED_REPO_FN):
-                with open(TRUSTED_REPO_FN, "r") as tdata:
-                    trusted = yaml.safe_load(tdata.read())
-
-        if info["clone"] in trusted["REPOS"]:
-            _create_status(
-                info["repo"],
-                info["sha"],
-                "success",
-                "Repo trusted",
-                "CI permissions",
-            )
-            return True
-        else:
-            _create_status(
-                info["repo"],
-                info["sha"],
-                "failure",
-                "Repo untrusted",
-                "CI permissions",
-            )
+        trusted_repos = testlib.get_trusted_repos()
     except Exception as e:
-        _p(f"Unable to retrieve trusted repo list! {e}")
+        _p(f"Exception when checking trusted repo: {e}")
+        _p(str(traceback.format_exc()))
         _create_status(
             info["repo"],
             info["sha"],
             "failure",
-            "WL unavailable!",
+            "Unable to retrieve trusted repo. list",
             "CI permissions",
         )
-    return False
+        return False
+
+    if trusted_repos is None:
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "failure",
+            "trust list unavailable!",
+            "CI permissions",
+        )
+        return False
+
+    if info["clone"] in trusted_repos:
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "success",
+            "Repo trusted",
+            "CI permissions",
+        )
+        return True
+    else:
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "failure",
+            "Repo untrusted",
+            "CI permissions",
+        )
+        return False
 
 
 def log_dir_create():

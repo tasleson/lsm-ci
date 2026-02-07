@@ -405,6 +405,35 @@ class Cmds(object):
             testlib.p(f"Invalid branch name rejected: {branch}")
             return "", 400, "Invalid branch name format"
 
+        # CRITICAL SECURITY CHECK: Ensure repo is trusted
+        # If the node_manager sends an untrusted repo, it has been compromised
+        # or there's a critical bug. Exit immediately to prevent untrusted code execution.
+        trusted_repos = testlib.get_trusted_repos()
+
+        if trusted_repos is None:
+            # Unable to retrieve trusted repo list (GitHub down, network issues, etc.)
+            # Return error to node_manager instead of exiting
+            testlib.p(f"Unable to verify trusted repo list for {repo}")
+            testlib.p("  This could be due to GitHub or network issues")
+            return "", 503, "Unable to retrieve trusted repository list"
+
+        if repo not in trusted_repos:
+            # Repo is definitively NOT trusted - node_manager compromised!
+            testlib.p("=" * 80)
+            testlib.p(
+                "CRITICAL SECURITY ALERT: UNTRUSTED REPOSITORY RECEIVED!")
+            testlib.p("=" * 80)
+            testlib.p(f"  Untrusted repo: {repo}")
+            testlib.p(f"  Branch: {branch}")
+            testlib.p(f"  Array ID: {array_id}")
+            testlib.p(f"  Timestamp: {time.time()}")
+            testlib.p("  The node_manager may be compromised!")
+            testlib.p(
+                "  This node will now exit to prevent execution of untrusted code."
+            )
+            testlib.p("=" * 80)
+            sys.exit(1)
+
         testlib.p(f"Running test for {repo} {branch} {array_id}")
 
         if any([x for x in config["ARRAYS"] if x["ID"] == array_id]):
