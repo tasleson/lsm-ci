@@ -7,11 +7,11 @@ ARRAYS:
 LOGDIR: /tmp/unit
 
 # What is being executed 
-PROGRAM: <some program>
+PROGRAM: some_test.sh
 
 # Server and port
 SERVER_IP: 'localhost'
-SERVER_PORT: 443
+SERVER_PORT: 43201
 PROXY_IS_IP:  True
 USE_PROXY: False
 PROXY_HOST: 'localhost'

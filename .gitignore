@@ -1,3 +1,14 @@
 *.pyc
 *.pem
 start_node_manager.sh
+*.crt
+*.key
+*.csr
+*.srl
+
+# Code signing keys (production keys should NEVER be committed)
+certs/code_signing.key
+certs/code_signing.pub
+
+# signed json file, we could include this
+signatures.json

@@ -16,23 +16,74 @@ import sys
 import datetime
 import testlib
 import errno
-
-try:
-    # noinspection PyUnresolvedReferences,PyCompatibility
-    import Queue
-except ImportError:
-    # noinspection PyUnresolvedReferences,PyCompatibility,PyPep8Naming
-    import queue as Queue
+import queue as Queue
 
 import traceback
 from testlib import p as _p
 import re
 from collections import deque
 import json
-import copy
 import yaml
 
 pp = pprint.PrettyPrinter(depth=4)
+
+# Development mode: set LSM_CI_DEV_MODE=1 to bypass signature verification
+# and disable client updates. Useful for rapid development/testing. NEVER use in production!
+DEV_MODE = os.getenv("LSM_CI_DEV_MODE", "") == "1"
+
+
+class ThreadSafeWorkLog:
+    """
+    Thread-safe wrapper for the work log deque.
+    All operations are protected by a lock.
+    """
+
+    def __init__(self, maxlen=20):
+        self._deque = deque(maxlen=maxlen)
+        self._lock = threading.Lock()
+
+    def append(self, item):
+        """Add an item to the work log."""
+        with self._lock:
+            self._deque.append(item)
+
+    def get_all(self):
+        """Get a snapshot of all items (newest to oldest)."""
+        with self._lock:
+            return list(reversed(self._deque))
+
+    def find_by_test_id(self, test_id):
+        """
+        Find a work item by test_run_id.
+        Returns a copy of the item or None.
+        """
+        with self._lock:
+            for item in self._deque:
+                if int(item["test_run_id"]) == int(test_id):
+                    return dict(item)  # Return a copy
+            return None
+
+
+class AtomicCounter:
+    """
+    Thread-safe counter with atomic increment.
+    """
+
+    def __init__(self, initial=0):
+        self._value = initial
+        self._lock = threading.Lock()
+
+    def increment(self):
+        """Atomically increment and return the NEW value."""
+        with self._lock:
+            self._value += 1
+            return self._value
+
+    def get(self):
+        """Get current value."""
+        with self._lock:
+            return self._value
+
 
 # What Host/IP & port to serve on
 HOST = os.getenv("HOST", "localhost")
@@ -51,7 +102,7 @@ ERROR_LOG_DIR = os.getenv("CI_LOG_DIR", "/tmp/ci_log")
 
 # Where to find the logs, this is the url in the github status update when
 # we have an error
-CI_SERVICE_URL = os.getenv("CI_URL", "http://%s:%s/log" % (HOST, PORT))
+CI_SERVICE_URL = os.getenv("CI_URL", f"http://{HOST}:{PORT}/log")
 
 # The file with trusted repos in it
 TRUSTED_REPO_FN = os.getenv("TRUSTED_REPOS", "")
@@ -59,8 +110,8 @@ TRUSTED_REPO_FN = os.getenv("TRUSTED_REPOS", "")
 # Full path to trusted file on repo itself
 TRUSTED_REPO_REMOTE = os.getenv(
     "TRUSTED_REPOS_REMOTE",
-    "https://raw.githubusercontent.com/"
-    + "libstorage/libstoragemgmt/master/test/trusted.yaml",
+    "https://raw.githubusercontent.com/" +
+    "libstorage/libstoragemgmt/master/test/trusted.yaml",
 )
 
 # When we test locally we don't want to try and set status on github.
@@ -70,12 +121,13 @@ POST_STATUS = bool(os.getenv("POST_STATUS", ""))
 f_name = re.compile("[a-z]{32}.html")
 
 # We are storing a history of work, so that we can go back and re-run as needed
-work_log = deque(maxlen=20)
+work_log = ThreadSafeWorkLog(maxlen=20)
 
 node_mgr = testlib.NodeManager(HOST)
 req_q = Queue.Queue()
+req_q_lock = threading.Lock()  # Lock for safe access to req_q.queue internals
 
-test_count = 0
+test_count = AtomicCounter()
 
 processing = None
 processing_mutex = threading.Lock()
@@ -87,17 +139,14 @@ def _post_with_retries(url, data, auth):
             r = requests.post(url, auth=auth, json=data)
             return r
         except requests.ConnectionError as ce:
-            _p("ConnectionError to (post) %s : message(%s)" % (url, str(ce)))
+            _p(f"ConnectionError to (post) {url} : message({ce})")
             _p("Trying again in 1 second")
             time.sleep(1)
 
 
 def _print_error(req, msg):
     formatted_json = pp.pformat(req.json())
-    _p(
-        "%s status code = %d, \nJSON: \n%s\n"
-        % (msg, req.status_code, formatted_json)
-    )
+    _p(f"{msg} status code = {req.status_code}, \nJSON: \n{formatted_json}\n")
 
 
 def _log_write(node, job_id):
@@ -129,7 +178,7 @@ def _log_read(fn):
                     out += "**** Line omitted as it contains a password ****\n"
             return out
         except Exception as e:
-            _p("_log_read error: %s" % str(e))
+            _p(f"_log_read error: {e}")
             pass
     return None
 
@@ -138,9 +187,9 @@ def _log_read(fn):
 def _create_status(repo, sha1, state, desc, context, log_url=None):
 
     if "/" not in repo:
-        raise Exception("Expecting repo to be in form user/repo %s" % repo)
+        raise Exception(f"Expecting repo to be in form user/repo {repo}")
 
-    url = "https://api.github.com/repos/%s/statuses/%s" % (repo, sha1)
+    url = f"https://api.github.com/repos/{repo}/statuses/{sha1}"
     data = {"state": state, "description": desc, "context": context}
 
     if log_url:
@@ -149,15 +198,14 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
     if POST_STATUS:
         r = _post_with_retries(url, data, (USER, TOKEN))
         if r.status_code == 201:
-            _p("We updated status url=%s data=%s" % (str(url), str(data)))
+            _p(f"We updated status url={url} data={data}")
         else:
             _print_error(
                 r,
-                "Unexpected error on setting status url=%s data=%s "
-                % (str(url), str(data)),
+                f"Unexpected error on setting status url={url} data={data} ",
             )
     else:
-        _p("NOT POSTED: updated status url=%s data=%s" % (str(url), str(data)))
+        _p(f"NOT POSTED: updated status url={url} data={data}")
 
 
 def trusted_repo(info):
@@ -165,55 +213,53 @@ def trusted_repo(info):
     Determine if we trust a repo.
 
     We are opening the file each time, so we can update it without restarting
-    # the service.
+    the service.
     :param info:  Information about what is to be tested
     :return: True/False
     """
 
-    trusted = {}
-
-    # Lets fetch the file from the master repo if it exists, otherwise we will
-    # use our local copy.
     try:
-        result = requests.get(TRUSTED_REPO_REMOTE)
-
-        if result.status_code == 200:
-            _p("Using github repo trusted file.")
-            trusted = yaml.safe_load(result.text)
-        else:
-            if os.path.exists(TRUSTED_REPO_FN) and os.path.isfile(
-                TRUSTED_REPO_FN
-            ):
-                with open(TRUSTED_REPO_FN, "r") as tdata:
-                    trusted = yaml.safe_load(tdata.read())
-
-        if info["clone"] in trusted["REPOS"]:
-            _create_status(
-                info["repo"],
-                info["sha"],
-                "success",
-                "Repo trusted",
-                "CI permissions",
-            )
-            return True
-        else:
-            _create_status(
-                info["repo"],
-                info["sha"],
-                "failure",
-                "Repo untrusted",
-                "CI permissions",
-            )
+        trusted_repos = testlib.get_trusted_repos()
     except Exception as e:
-        _p("Unable to retrieve trusted repo list! %s" % str(e))
+        _p(f"Exception when checking trusted repo: {e}")
+        _p(str(traceback.format_exc()))
         _create_status(
             info["repo"],
             info["sha"],
             "failure",
-            "WL unavailable!",
+            "Unable to retrieve trusted repo. list",
             "CI permissions",
         )
-    return False
+        return False
+
+    if trusted_repos is None:
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "failure",
+            "trust list unavailable!",
+            "CI permissions",
+        )
+        return False
+
+    if info["clone"] in trusted_repos:
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "success",
+            "Repo trusted",
+            "CI permissions",
+        )
+        return True
+    else:
+        _create_status(
+            info["repo"],
+            info["sha"],
+            "failure",
+            "Repo untrusted",
+            "CI permissions",
+        )
+        return False
 
 
 def log_dir_create():
@@ -260,13 +306,7 @@ def run_tests(info):
                 info["repo"],
                 info["sha"],
                 "pending",
-                "Plugin = %s started @ %s"
-                % (
-                    a[1],
-                    datetime.datetime.fromtimestamp(time.time()).strftime(
-                        "%m/%d %H:%M:%S"
-                    ),
-                ),
+                f"Plugin = {a[1]} started @ {datetime.datetime.fromtimestamp(time.time()).strftime('%m/%d %H:%M:%S')}",
                 a[0],
             )
 
@@ -278,7 +318,7 @@ def run_tests(info):
         for a in n.arrays():
             job = n.start_test(info["clone"], info["branch"], a[0])
             if job:
-                _p("Test started for %s job = %s" % (a[0], job))
+                _p(f"Test started for {a[0]} job = {job}")
             else:
                 _create_status(
                     info["repo"],
@@ -319,7 +359,7 @@ def run_tests(info):
 
                         info["status"] = "SUCCESS"
                     else:
-                        url = "%s/%s.html" % (CI_SERVICE_URL, job_id)
+                        url = f"{CI_SERVICE_URL}/{job_id}.html"
                         info["status"] = url
                         # Fetch the error log, log error data and status
                         _log_write(n, job_id)
@@ -342,33 +382,12 @@ def run_tests(info):
     _p("Test run completed")
 
 
-# Probably a poor attempt at a constant time compare function, derived from the
-# C source for hmac.compare_digest
-def _tscmp(a, b):
-    result = 0
-    b_len = len(b)
-    if len(a) != b_len:
-        a = b
-        result = 1
-
-    for i in range(0, b_len):
-        # noinspection PyUnresolvedReferences
-        result |= ord(a[i]) ^ ord(b[i])
-
-    return result == 0
-
-
 # Verify the payload using our shared secret with github
 def _verify_signature(payload_body, header_signature):
     # noinspection PyUnresolvedReferences
     h = hmac.new(GIT_SECRET.encode("utf-8"), payload_body, hashlib.sha1)
     signature = "sha1=" + h.hexdigest()
-    try:
-        # Python 2.7 and later have this which is suggested
-        # noinspection PyUnresolvedReferences
-        return hmac.compare_digest(signature, header_signature)
-    except AttributeError:
-        return _tscmp(signature, header_signature)
+    return hmac.compare_digest(signature, header_signature)
 
 
 # Thread that runs taking work off of the request queue and processing it
@@ -387,7 +406,7 @@ def request_queue():
 
         # noinspection PyBroadException
         try:
-            info = req_q.get(True, 3)
+            info = req_q.get(True, testlib.POLL_TIMEOUT)
 
             with processing_mutex:
                 processing = info
@@ -400,7 +419,7 @@ def request_queue():
             pass
         except Exception:
             st = traceback.format_exc()
-            _p("request_queue: unexpected exception: %s" % st)
+            _p(f"request_queue: unexpected exception: {st}")
 
     _p("Exiting request_queue")
 
@@ -411,15 +430,8 @@ def completed_requests():
     Handles the request for what has been completed.
     :return: JSON
     """
-    rc = []
-    c_r = reversed(list(work_log))
-
     response.content_type = "application/json"
-
-    for i in c_r:
-        rc.append(i)
-
-    return json.dumps(rc)
+    return json.dumps(work_log.get_all())
 
 
 @route("/processing")
@@ -441,47 +453,68 @@ def processing_requests():
     return json.dumps(rc)
 
 
-@route("/rerun/<test_id>")
-def rerun_test(test_id):
+@route("/rerun/<auth_param>")
+def rerun_test(auth_param):
     """
-    Re-runs a test
-    :param test_id:  Test id to re-run.
+    Re-runs a test with SHA256 authentication
+    :param auth_param: Format: sha256=<hex>:<test_id>
+                       where <hex> is SHA256(GIT_SECRET + test_id)
     :return: Appropriate http status code
     """
-    global test_count
-
-    tmp_id = 0
-
-    # We are only expecting a number here
+    # Parse the auth_param format: sha256=<hex>:<test_id>
     try:
-        tmp_id = int(test_id)
-    except ValueError as ve:
+        if not auth_param.startswith("sha256="):
+            response.status = 400
+            return "Invalid format: must start with 'sha256='"
+
+        # Remove "sha256=" prefix
+        param_data = auth_param[7:]  # len("sha256=") == 7
+
+        # Split on the colon to get hash and test_id
+        parts = param_data.split(":", 1)
+        if len(parts) != 2:
+            response.status = 400
+            return "Invalid format: expected sha256=<hex>:<test_id>"
+
+        provided_hash, test_id_str = parts
+
+        # Validate test_id is an integer
+        test_id = int(test_id_str)
+
+        # Compute expected hash: SHA256(GIT_SECRET + test_id)
+        message = GIT_SECRET + test_id_str
+        expected_hash = hashlib.sha256(message.encode('utf-8')).hexdigest()
+
+        # Compare hashes using constant-time comparison to prevent timing attacks
+        if not hmac.compare_digest(provided_hash.lower(),
+                                   expected_hash.lower()):
+            response.status = 403
+            _p(f"Invalid SHA256 authentication for test_id {test_id} from {request.remote_addr}"
+               )
+            return "Authentication failed"
+
+    except ValueError:
+        response.status = 400
+        return "Invalid test_id: must be an integer"
+    except Exception as e:
+        response.status = 400
+        return f"Error parsing auth parameter: {str(e)}"
+
+    # Thread-safe lookup in work_log
+    item = work_log.find_by_test_id(test_id)
+
+    if item:
+        _p(f"Re-running test: client IP {request.remote_addr}: {test_id} {item}"
+           )
+
+        # Atomically get new test_run_id
+        item["test_run_id"] = test_count.increment()
+        req_q.put(item)
+        response.status = 200
+        return "Test queued for rerun"
+    else:
         response.status = 404
-        return
-
-    submitted = False
-
-    for i in list(work_log):
-        # noinspection PyTypeChecker
-        if int(i["test_run_id"]) == int(test_id):
-            # Try to make the test counts unique
-            cpy = copy.deepcopy(i)
-
-            _p(
-                "Re-running test: client IP %s: %s %s"
-                % (request.remote_addr, str(test_id), str(cpy))
-            )
-
-            cpy["test_run_id"] = test_count
-            test_count += 1
-            req_q.put(cpy)
-            response.status = 200
-            submitted = True
-            break
-
-    if not submitted:
-        response.status = 404
-    return
+        return "Test not found"
 
 
 # Return what clients we have connected to us
@@ -521,9 +554,13 @@ def queue():
     rc = []
     response.content_type = "application/json"
 
-    wq = list(req_q.queue)
-    for i in wq:
-        rc.append(i)
+    # Thread-safe access to queue internals
+    # Hold lock while accessing req_q.queue to prevent race conditions
+    with req_q_lock:
+        # Access the internal deque under lock
+        wq = list(req_q.queue)
+        for i in wq:
+            rc.append(i)
 
     return json.dumps(rc)
 
@@ -554,12 +591,9 @@ def e_handler():
     Github calls this when we get a pull request
     :return: Http status code, 500 on error, else 200.
     """
-    global test_count
-
     # Check secret before we do *anything*
-    if not _verify_signature(
-        request.body.read(), request.headers["X-Hub-Signature"]
-    ):
+    if not _verify_signature(request.body.read(),
+                             request.headers["X-Hub-Signature"]):
         response.status = 500
         return
 
@@ -569,14 +603,17 @@ def e_handler():
         sha = request.json["pull_request"]["head"]["sha"]
         branch = request.json["pull_request"]["head"]["ref"]
 
-        _p("Queuing unit tests for %s %s" % (clone, branch))
+        _p(f"Queuing unit tests for {clone} {branch}")
+
+        # Atomically get and increment test count
+        current_test_id = test_count.increment()
 
         info = dict(
             repo=repo,
             sha=sha,
             branch=branch,
             clone=clone,
-            test_run_id=test_count,
+            test_run_id=current_test_id,
         )
 
         # Lets immediately set something on the PR so that people looking at
@@ -585,23 +622,93 @@ def e_handler():
             info["repo"],
             info["sha"],
             "pending",
-            "CI requested, #waiting = %d" % req_q.qsize(),
+            f"CI requested, #waiting = {req_q.qsize()}",
             "CI permissions",
         )
         req_q.put(info)
-
-        test_count += 1
     else:
         _p("Got an unexpected header from github")
         for k, v in request.headers.items():
-            _p("%s:%s" % (str(k), str(v)))
+            _p(f"{k}:{v}")
         pp.pprint(request.json)
         sys.stdout.flush()
 
     response.status = 200
 
 
+def verify_startup_signatures():
+    """
+    Verify that signatures.json exists and files match their signatures.
+
+    The server should verify it has valid signed files before pushing
+    updates to clients. This prevents pushing unsigned or tampered files.
+
+    Returns: (success, error_message)
+    """
+    # Allow bypassing in development mode
+    if DEV_MODE:
+        testlib.p("⚠ DEV MODE: Skipping server startup signature verification")
+        testlib.p("  Client updates will be disabled")
+        return True, ""
+
+    testlib.p("Verifying file signatures on server startup...")
+
+    # Check if signatures.json exists
+    sig_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            'signatures.json')
+    if not os.path.exists(sig_file):
+        return False, "signatures.json not found - cannot push updates to clients"
+
+    try:
+        with open(sig_file) as f:
+            signatures = json.load(f)
+    except Exception as e:
+        return False, f"Failed to load signatures.json: {e}"
+
+    # Verify the files we'll be pushing match their signatures
+    files_to_check = ['node.py', 'testlib.py', 'ci_unit_test.sh']
+
+    for filename in files_to_check:
+        if filename not in signatures:
+            return False, f"No signature for {filename} in signatures.json"
+
+        sig_data = signatures[filename]
+        expected_hash = sig_data.get('sha256')
+
+        if not expected_hash:
+            return False, f"Invalid signature data for {filename}"
+
+        # Calculate actual hash
+        file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                 filename)
+        try:
+            actual_hash = testlib.file_sha256(file_path)
+        except Exception as e:
+            return False, f"Failed to hash {filename}: {e}"
+
+        # Verify hash matches
+        if actual_hash != expected_hash:
+            return False, f"File {filename} has been modified since signing - re-sign before starting!"
+
+    testlib.p("✓ Server startup signature verification passed")
+    testlib.p(
+        "  All files match their signatures and are ready to push to clients")
+    return True, ""
+
+
 if __name__ == "__main__":
+
+    # Verify signatures before starting
+    success, error_msg = verify_startup_signatures()
+    if not success:
+        testlib.p(f"✗ SIGNATURE VERIFICATION FAILED!")
+        testlib.p(f"  {error_msg}")
+        testlib.p("")
+        testlib.p("The server will NOT push unsigned files to clients.")
+        testlib.p("Please re-sign files before starting:")
+        testlib.p("  python3 tools/sign_files.py --key <your-signing-key>")
+        testlib.p("")
+        sys.exit(1)
 
     # Start up the node manager
     node_mgr.start()

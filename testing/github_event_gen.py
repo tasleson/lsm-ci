@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """
 Used for testing the service locally
 """
@@ -20,7 +21,8 @@ def gen_signature(data):
     :param data: Data to generate signature for
     :return: "sha1=<hexdigest>"
     """
-    h = hmac.new(GIT_SECRET.encode("utf-8"), data.encode("utf-8"), hashlib.sha1)
+    h = hmac.new(GIT_SECRET.encode("utf-8"), data.encode("utf-8"),
+                 hashlib.sha1)
     s = "sha1=" + h.hexdigest()
     return s.encode("utf-8")
 
@@ -34,7 +36,7 @@ if __name__ == "__main__":
         default="https://github.com/tasleson/libstoragemgmt.git",
     )
 
-    parser.add_argument("--branch", dest="branch", default="master")
+    parser.add_argument("--branch", dest="branch", default="main")
     parser.add_argument(
         "--sha1",
         dest="sha1",
@@ -43,7 +45,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    url = "http://%s:%s/event_handler" % (IP_ADDRESS, PORT_NUM)
+    url = f"http://{IP_ADDRESS}:{PORT_NUM}/event_handler"
 
     head = {
         "Content-type": "application/json",
@@ -60,8 +62,7 @@ if __name__ == "__main__":
     body["pull_request"]["head"]["repo"] = dict()
 
     body["pull_request"]["base"]["repo"][
-        "full_name"
-    ] = "libstorage/libstoragemgmt"
+        "full_name"] = "libstorage/libstoragemgmt"
 
     body["pull_request"]["head"]["repo"]["clone_url"] = args.clone_url
     body["pull_request"]["head"]["sha"] = args.sha1
@@ -71,8 +72,8 @@ if __name__ == "__main__":
 
     head["X-Hub-Signature"] = gen_signature(body_json)
 
-    response = requests.post(
-        url=url, headers=head, data=body_json.encode("utf-8")
-    )
+    response = requests.post(url=url,
+                             headers=head,
+                             data=body_json.encode("utf-8"))
 
-    print("status = %d" % int(response.status_code))
+    print(f"status = {int(response.status_code)}")

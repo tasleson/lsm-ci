@@ -15,7 +15,6 @@ import sys
 from subprocess import call
 from multiprocessing import Process
 
-
 jobs = {}
 config = {}
 
@@ -32,7 +31,7 @@ def _lcall(command, job_id):
     """
 
     # Write output to a file so we can see what's going on while it's running
-    f = "/tmp/%s.out" % job_id
+    f = f"/tmp/{job_id}.out"
 
     with open(f, "w", buffering=1) as log:  # Max buffer 1 line (text mode)
         exit_value = call(command, stdout=log, stderr=log)
@@ -40,7 +39,7 @@ def _lcall(command, job_id):
 
 
 def _file_name(job_id):
-    base = "%s/%s" % (config["LOGDIR"], job_id)
+    base = f"{config['LOGDIR']}/{job_id}"
     return base + ".out"
 
 
@@ -69,7 +68,8 @@ def _run_command(job_id, args):
 
 
 def _rs(length):
-    return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
+    return "".join(
+        random.choice(string.ascii_lowercase) for _ in range(length))
 
 
 def _load_config():
@@ -94,7 +94,7 @@ def _update_state(job_id):
     p = job["PROCESS"]
     p.join(0)
     if not p.is_alive():
-        print("%s exited with %s " % (p.name, str(p.exitcode)))
+        print(f"{p.name} exited with {p.exitcode} ")
         sys.stdout.flush()
 
         if p.exitcode == 0:
@@ -175,13 +175,8 @@ def test():
     global jobs
     req = request.json
 
-    if (
-        req
-        and "REPO" in req
-        and "BRANCH" in req
-        and "ID" in req
-        and any([x for x in config["ARRAYS"] if x["ID"] == req["ID"]])
-    ):
+    if (req and "REPO" in req and "BRANCH" in req and "ID" in req
+            and any([x for x in config["ARRAYS"] if x["ID"] == req["ID"]])):
 
         # Add a check to make sure we aren't already _running_ a job for this
         # array
@@ -213,9 +208,10 @@ def test():
         p.name = "|".join(incoming)
         p.start()
 
-        jobs[job_id] = dict(
-            STATUS="RUNNING", PROCESS=p, ID=req["ID"], PLUGIN=plug
-        )
+        jobs[job_id] = dict(STATUS="RUNNING",
+                            PROCESS=p,
+                            ID=req["ID"],
+                            PLUGIN=plug)
         response.status = 201
         return {"JOB_ID": job_id}
     else:

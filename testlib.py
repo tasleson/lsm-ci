@@ -21,13 +21,41 @@ import threading
 import select
 import traceback
 import multiprocessing
-import ctypes
 import signal
 
 # What port the clients will try to connect to
 PORT = int(os.getenv("LSM_CI_CLIENT_PORT", 443))
 
+# Timeout for initial connection validation (seconds)
+INITIAL_TIMEOUT = int(os.getenv("LSM_CI_INITIAL_TIMEOUT", "1"))
+
+# Timeout for authenticated client operations (seconds)
+LONG_TIMEOUT = int(os.getenv("LSM_CI_LONG_TIMEOUT", str(3 * 60)))
+
+# Timeout for polling operations (select, queue get, etc.) in seconds
+POLL_TIMEOUT = int(os.getenv("LSM_CI_POLL_TIMEOUT", "1"))
+
+# TLS certificate paths
+CA_CERT = os.getenv("LSM_CI_CA_CERT", "certs/ca.pem")
+CLIENT_CERT = os.getenv("LSM_CI_CLIENT_CERT", "certs/client.crt")
+CLIENT_KEY = os.getenv("LSM_CI_CLIENT_KEY", "certs/client.key")
+SERVER_CERT = os.getenv("LSM_CI_SERVER_CERT", "certs/server.crt")
+SERVER_KEY = os.getenv("LSM_CI_SERVER_KEY", "certs/server.key")
+SERVER_HOSTNAME = os.getenv("LSM_CI_SERVER_HOSTNAME", "ci.asleson.org")
+
 hs = os.getenv("LSM_CI_HASH_SALT", "")
+
+# Development mode: set LSM_CI_DEV_MODE=1 to bypass signature verification
+# and disable client updates. Useful for rapid development/testing. NEVER use in production!
+DEV_MODE = os.getenv("LSM_CI_DEV_MODE", "") == "1"
+
+# Trusted repository configuration
+TRUSTED_REPO_FN = os.getenv("TRUSTED_REPOS", "")
+TRUSTED_REPO_REMOTE = os.getenv(
+    "TRUSTED_REPOS_REMOTE",
+    "https://raw.githubusercontent.com/" +
+    "libstorage/libstoragemgmt/master/test/trusted.yaml",
+)
 
 RUN = multiprocessing.Value("i", 1)
 
@@ -40,35 +68,75 @@ def _file_data(file_name):
     return file_contents
 
 
-def file_md5(file_name):
+def file_sha256(file_name):
     """
-    Given a file name return md5 signature
+    Given a file name return SHA-256 hash
     :param file_name: The name of the file
-    :return: md5 signature.
+    :return: SHA-256 hash hex string.
     """
-    return md5(_file_data(file_name))
+    return sha256(_file_data(file_name))
 
 
-def file_md5_and_data(file_name):
+def file_sha256_and_data(file_name):
     """
-    Returns the md5 and contents of file data.
+    Returns the SHA-256 hash and contents of file data.
     :param file_name: File name to open
-    :return: (md5 file data, data)
+    :return: (SHA-256 hash, data)
     """
     fd = _file_data(file_name)
-    return md5(fd), fd
+    return sha256(fd), fd
 
 
-def md5(t):
+def sha256(t):
     """
-    Calculate the md5 of data t
-    :param t: Data to generate md5 for
-    :return: md5 hex digest
+    Calculate the SHA-256 hash of data t
+    :param t: Data to generate SHA-256 for
+    :return: SHA-256 hex digest
     """
-    h = hashlib.md5()
+    h = hashlib.sha256()
     h.update(t.encode("utf-8"))
     h.update(hs.encode("utf-8"))
     return h.hexdigest()
+
+
+def get_trusted_repos():
+    """
+    Fetch the list of trusted repositories.
+
+    Tries to fetch from the remote URL first, falls back to local file.
+    This is a security-critical function used to prevent execution of
+    untrusted code.
+
+    We are opening the file each time, so we can update it without restarting
+    the service.
+
+    :return: List of trusted repo URLs, or None on error
+    """
+    import requests
+    import yaml
+
+    trusted = {}
+
+    try:
+        result = requests.get(TRUSTED_REPO_REMOTE)
+
+        if result.status_code == 200:
+            p("Using github repo trusted file.")
+            trusted = yaml.safe_load(result.text)
+        else:
+            if os.path.exists(TRUSTED_REPO_FN) and os.path.isfile(
+                    TRUSTED_REPO_FN):
+                with open(TRUSTED_REPO_FN, "r") as tdata:
+                    trusted = yaml.safe_load(tdata.read())
+
+        if "REPOS" in trusted:
+            return trusted["REPOS"]
+        else:
+            p("Trusted repo file missing 'REPOS' key")
+            return None
+    except Exception as e:
+        p(f"Unable to retrieve trusted repo list! {e}")
+        return None
 
 
 class Request(object):
@@ -107,8 +175,7 @@ class Response(object):
         :return: JSON
         """
         return json.dumps(
-            dict(ec=self.ec, err_msg=self.err_msg, result=self.result)
-        )
+            dict(ec=self.ec, err_msg=self.err_msg, result=self.result))
 
     def __str__(self):
         return self.serialize()
@@ -133,7 +200,7 @@ class Transport(object):
     Handles the messages on the byte stream.
     """
 
-    HDR_LEN = 10 + 32
+    HDR_LEN = 10 + 64  # 10 digits for length + 64 chars for SHA-256 hex
 
     def __init__(self, s):
         self.s = s
@@ -160,12 +227,12 @@ class Transport(object):
         hdr = self._read_all(self.HDR_LEN)
         payload_len, signature = int(hdr[:10]), hdr[10:]
 
-        if payload_len > 2 ** 28:
-            raise IOError("Payload len too large %d" % payload_len)
+        if payload_len > 2**28:
+            raise IOError(f"Payload len too large {payload_len}")
 
         payload = self._read_all(payload_len)
 
-        if md5(payload) != signature:
+        if sha256(payload) != signature:
             raise IOError("Incorrect signature!")
 
         return deserialize(payload)
@@ -179,16 +246,12 @@ class Transport(object):
 
         # Message will have the following format
         # 10 digit payload length
-        # 32 character payload md5
+        # 64 character payload SHA-256
         # payload
         serialized_msg = msg.serialize()
-        digest = md5(serialized_msg)
+        digest = sha256(serialized_msg)
 
-        to_send = "%s%s%s" % (
-            str.zfill(str(len(serialized_msg)), 10),
-            digest,
-            serialized_msg,
-        )
+        to_send = f"{str(len(serialized_msg)).zfill(10)}{digest}{serialized_msg}"
         self.s.sendall(bytes(to_send.encode("utf-8")))
 
 
@@ -202,11 +265,10 @@ def p(msg):
     # this allows us to pickup bottle messages too
     sys.stderr.flush()
     with print_lock:
-        tid = ctypes.CDLL("libc.so.6").syscall(224)
-        ts = datetime.datetime.fromtimestamp(time.time()).strftime(
-            "%Y-%m-%d %H:%M:%S.%f"
-        )
-        print("%s: %d:%d- %s" % (ts, os.getpid(), tid, msg))
+        tid = threading.get_native_id()
+        ts = datetime.datetime.fromtimestamp(
+            time.time()).strftime("%Y-%m-%d %H:%M:%S.%f")
+        print(f"{ts}: {os.getpid()}:{tid}- {msg}")
         sys.stdout.flush()
 
 
@@ -256,14 +318,11 @@ class TestNode(object):
             # We have pings that are happening every 15 seconds, lets wait
             # for up to 3 minutes waiting for one, otherwise we will error out
             # with a timeout on the read.
-            self.s.settimeout(3 * 60)
+            self.s.settimeout(LONG_TIMEOUT)
 
             if self.use_proxy:
-                p("Using proxy %s:%s" % (self.proxy_host, self.proxy_port))
-                proxy_msg = "CONNECT %s:%s HTTP/1.1\r\n\r\n" % (
-                    self.server_ip,
-                    self.port,
-                )
+                p(f"Using proxy {self.proxy_host}:{self.proxy_port}")
+                proxy_msg = f"CONNECT {self.server_ip}:{self.port} HTTP/1.1\r\n\r\n"
                 self.s.connect((self.proxy_host, self.proxy_port))
                 self.s.sendall(proxy_msg.encode("utf-8"))
                 response = self.s.recv(8192)
@@ -272,12 +331,22 @@ class TestNode(object):
                 if status != str(200):
                     raise IOError("Connection to proxy failed")
 
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_REQUIRED
-            context.load_cert_chain("client_cert.pem", "client_key.pem")
-            context.load_verify_locations("server_cert.pem")
-            self.s = context.wrap_socket(self.s)
+            context = ssl.create_default_context(
+                ssl.Purpose.SERVER_AUTH,
+                cafile=CA_CERT,
+            )
+
+            context.load_cert_chain(
+                certfile=CLIENT_CERT,
+                keyfile=CLIENT_KEY,
+            )
+
+            # Always enforce hostname verification for security
+            # NOTE: For local testing, ensure certificates have correct hostnames
+            p(f"server ip = {self.server_ip}")
+
+            self.s = context.wrap_socket(self.s,
+                                         server_hostname=SERVER_HOSTNAME)
 
             if self.use_proxy:
                 self.s.do_handshake()
@@ -287,7 +356,7 @@ class TestNode(object):
             self.t = Transport(self.s)
         except Exception as e:
             # Log the error
-            p("connect exception: %s" % str(e))
+            p(f"connect exception: {e}")
             _try_close(self.s)
             return False
 
@@ -362,10 +431,7 @@ class Node(object):
         """
         if self._state != value:
             if value == Node.UNUSABLE:
-                p(
-                    "Node %s:%d now unavailable!"
-                    % (self.client_ip, self.client_port)
-                )
+                p(f"Node {self.client_ip}:{self.client_port} now unavailable!")
         self._state = value
 
     def close(self):
@@ -396,15 +462,24 @@ class Node(object):
     def replace(self, other):
         """
         Replaces a connection with a node with this one.
+        NOTE: Caller should hold NodeManager lock to ensure thread safety.
         :param other: One to use as replacement.
         :return: None
         """
-        with self.lock:
-            with other.lock:
-                # Close this connection
-                self.close()
-                self.state = other.state
-                self.s = other.state
+        # Acquire locks in deterministic order (by object id) to prevent deadlock
+        # This ensures that if two threads try to replace nodes, they always
+        # acquire locks in the same order
+        first, second = sorted([self, other], key=lambda n: id(n))
+
+        with first.lock:
+            with second.lock:
+                # Close old connection (self)
+                _try_close(self.s)
+                self.state = Node.UNUSABLE
+
+                # Copy state from new connection (other)
+                self._state = other._state
+                self.s = other.s
                 self.t = other.t
                 self.client_ip = other.client_ip
                 self.client_port = other.client_port
@@ -419,7 +494,7 @@ class Node(object):
             if resp and resp.ec == 200:
                 return sorted(resp.result)
 
-            p("Error when calling 'arrays' %s" % str(resp))
+            p(f"Error when calling 'arrays' {resp}")
             return None
 
     def increase_tmo(self):
@@ -430,7 +505,7 @@ class Node(object):
         # If we get here we have an authenticated client that is
         # responding so we will give it more time to avoid timeouts
         with self.lock:
-            self.s.settimeout(3 * 60)
+            self.s.settimeout(LONG_TIMEOUT)
 
     def arrays_running(self):
         """
@@ -452,7 +527,7 @@ class Node(object):
                 # "PLUGIN": "sim"}]
                 return resp.result
             else:
-                p("Error when getting array list %s" % str(resp))
+                p(f"Error when getting array list {resp}")
 
             return []
 
@@ -474,16 +549,13 @@ class Node(object):
         :return: Result output
         """
         with self.lock:
-            resp = self._rpc("job_completion", (job_id,))
+            resp = self._rpc("job_completion", (job_id, ))
             if resp and resp.ec == 200:
                 output = json.loads(resp.result)["OUTPUT"]
                 return output
 
             if resp:
-                p(
-                    "Error: job_completion id = %s resp = %s"
-                    % (job_id, str(resp))
-                )
+                p(f"Error: job_completion id = {job_id} resp = {resp}")
             else:
                 p("Error: job_completion, no response!")
             return None
@@ -495,14 +567,11 @@ class Node(object):
         :return: None
         """
         with self.lock:
-            resp = self._rpc("job_delete", (job_id,))
+            resp = self._rpc("job_delete", (job_id, ))
             if resp and resp.ec != 200:
-                p(
-                    "Error: Unable to delete job id = %s resp = %s"
-                    % (job_id, str(resp))
-                )
+                p(f"Error: Unable to delete job id = {job_id} resp = {resp}")
             else:
-                p("Job %s deleted!" % job_id)
+                p(f"Job {job_id} deleted!")
 
     def start_test(self, clone_url, branch, array_id):
         """
@@ -517,42 +586,74 @@ class Node(object):
             if resp and resp.ec == 201:
                 return resp.result
             else:
-                p("Error: when creating job: %s" % str(resp))
+                p(f"Error: when creating job: {resp}")
             return None
 
-    def get_file_md5(self, file_list):
+    def get_file_sha256(self, file_list):
         """
-        Get an array of file signatures
+        Get an array of file SHA-256 hashes
         :param file_list:
-        :return: Array of file signatures.
+        :return: Array of file hashes.
         """
         with self.lock:
-            resp = self._rpc("md5_files", (file_list,))
+            resp = self._rpc("sha256_files", (file_list, ))
             if resp and resp.ec == 200:
                 return resp.result
             else:
-                p("Error when retrieving md5sums %s" % str(resp))
+                p(f"Error when retrieving SHA-256 hashes {resp}")
             return None
 
     def update_files(self, file_list):
         """
-        For each file in the file list, load it into memory, md5 it and
-        send it to the client!
+        For each file in the file list, load it into memory, hash it,
+        load its signature, and send it to the client!
         :param file_list: List of files.
         :return: Boolean
         """
+        # Load signatures.json
+        sig_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                'signatures.json')
+        try:
+            with open(sig_file) as f:
+                signatures = json.load(f)
+        except FileNotFoundError:
+            p(f"Error: signatures.json not found at {sig_file}")
+            return False
+        except json.JSONDecodeError as e:
+            p(f"Error: Invalid signatures.json: {e}")
+            return False
+
         pushed_files = []
 
         for f in file_list:
             fn = os.path.join(os.path.dirname(os.path.realpath(__file__)), f)
-            md5_sum, data = file_md5_and_data(fn)
-            pushed_files.append(dict(fn=f, md5=md5_sum, data=data))
+            sha256_hash, data = file_sha256_and_data(fn)
 
-        resp = self._rpc("update_files", (pushed_files,))
+            # Get signature for this file
+            if f not in signatures:
+                p(f"Error: No signature found for {f}")
+                return False
+
+            sig_data = signatures[f]
+            expected_hash = sig_data['sha256']
+            signature = sig_data['signature']
+
+            # Sanity check: verify hash matches signature
+            if sha256_hash != expected_hash:
+                p(f"Error: Hash mismatch for {f}! File may have been modified after signing."
+                  )
+                p(f"  Expected: {expected_hash}")
+                p(f"  Actual:   {sha256_hash}")
+                return False
+
+            pushed_files.append(
+                dict(fn=f, sha256=sha256_hash, signature=signature, data=data))
+
+        resp = self._rpc("update_files", (pushed_files, ))
         if resp and resp.ec == 200:
             return True
 
-        p("Error when updating files! %s" % str(resp))
+        p(f"Error when updating files! {resp}")
         return False
 
     def restart(self):
@@ -575,6 +676,13 @@ class NodeManager(object):
        during the duration of the test will not be utilized.  Clients that
        fall out during the test will be logged as failing with status on
        github stating as much
+
+    Lock Ordering Policy (to prevent deadlocks):
+     - If NodeManager.lock is needed, ALWAYS acquire it BEFORE any Node.lock
+     - Never acquire NodeManager.lock while holding a Node.lock
+     - Avoid holding NodeManager.lock during slow operations (e.g., network I/O)
+       by releasing it before calling methods like verify() that do network calls
+     - When acquiring multiple Node locks, use deterministic ordering (by id())
     """
 
     def __init__(self, listening_ip="", port=PORT):
@@ -591,7 +699,7 @@ class NodeManager(object):
         thread = threading.Thread(
             target=NodeManager.main_event_loop,
             name="Node Manager",
-            args=(self,),
+            args=(self, ),
         )
         thread.start()
 
@@ -600,13 +708,17 @@ class NodeManager(object):
         Find which nodes are responsive.
         :return: List of responsive nodes.
         """
-        rc = []
+        # Step 1: Get list of nodes under lock (quick)
+        nodes_to_check = []
         with self.lock:
-            for i in self.known_clients.values():
-                # Make sure the node is responsive before adding it to the list
-                # of nodes to run tests against
-                if i.verify():
-                    rc.append(i)
+            nodes_to_check = list(self.known_clients.values())
+
+        # Step 2: Verify nodes WITHOUT holding NodeManager lock
+        # This prevents deadlock - verify() acquires Node lock
+        rc = []
+        for node in nodes_to_check:
+            if node.verify():
+                rc.append(node)
 
         return rc
 
@@ -617,16 +729,23 @@ class NodeManager(object):
         # to be free again
         bindsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         bindsocket.bind((ip, port))
-        bindsocket.listen(5)
+        bindsocket.listen(25)
 
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.check_hostname = False
+        return bindsocket
+
+    @staticmethod
+    def _setup_server_tls_context():
+        # Setup SSL context
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+
+        context.load_cert_chain(
+            certfile=SERVER_CERT,
+            keyfile=SERVER_KEY,
+        )
+
+        context.load_verify_locations(cafile=CA_CERT)
         context.verify_mode = ssl.CERT_REQUIRED
-        context.load_cert_chain("server_cert.pem", "server_key.pem")
-        context.load_verify_locations("client_cert.pem")
-
-        connection = context.wrap_socket(bindsocket, server_side=True)
-        return connection
+        return context
 
     @staticmethod
     def _client_id(ip_address, arrays):
@@ -643,17 +762,16 @@ class NodeManager(object):
         # Setup the listening socket
         bindsocket = None
         try:
-            bindsocket = NodeManager._setup_listening(
-                node_mgr.ip, node_mgr.port
-            )
+            bindsocket = NodeManager._setup_listening(node_mgr.ip,
+                                                      node_mgr.port)
         except:
             p(str(traceback.format_exc()))
-            p(
-                "Unable to setup listening socket (%s:%d), shutting down"
-                % (node_mgr.ip, node_mgr.port)
-            )
+            p(f"Unable to setup listening socket ({node_mgr.ip}:{node_mgr.port}), shutting down"
+              )
             RUN.value = 0
             os.kill(os.getpid(), signal.SIGINT)
+
+        context = NodeManager._setup_server_tls_context()
 
         while RUN.value:
 
@@ -663,56 +781,43 @@ class NodeManager(object):
 
             # noinspection PyBroadException
             try:
-                ready = select.select([bindsocket], [], [bindsocket], 15)
+                ready = select.select([bindsocket], [], [bindsocket],
+                                      POLL_TIMEOUT)
 
                 if len(ready[2]):
                     p("Error on listening socket, re-creating...")
                     _try_close(bindsocket)
                     bindsocket = NodeManager._setup_listening(
-                        node_mgr.ip, node_mgr.port
-                    )
+                        node_mgr.ip, node_mgr.port)
                 else:
                     for r in ready[0]:
-                        connection, from_addr = bindsocket.accept()
+                        new_socket, from_addr = bindsocket.accept()
+
+                        # Wrap the socket
+                        connection = context.wrap_socket(new_socket,
+                                                         server_side=True)
+
+                        # TODO: add certificate pinning
 
                         # Set a fairly short timeout, so badly behaving clients
-                        # don't muck things up.	
-                        connection.settimeout(1)
-
-                        # Make sure that if we trust the certificate chain
-                        # that we are using the one signed that has the
-                        # expected serial number.
-                        peer_cert = connection.getpeercert()
-                        if (
-                            peer_cert is None
-                            or peer_cert["serialNumber"] != "B442051E67AA6DBF"
-                        ):
-                            _try_close(new_socket)
-                            p(
-                                "Non-matching SN: rejecting %s (%s)"
-                                % (str(from_addr), str(peer_cert))
-                            )
-                            continue
+                        # don't muck things up.
+                        connection.settimeout(INITIAL_TIMEOUT)
 
                         nc = Node(connection, from_addr)
                         arrays = nc.arrays()
                         if arrays is None:
                             nc.close()
-                            p(
-                                "Node has no configured arrays, rejecting %s"
-                                % str(from_addr)
-                            )
+                            p(f"Node has no configured arrays, rejecting {from_addr}"
+                              )
                             continue
 
                         # We have a well-behaved client, increase timeouts
                         nc.increase_tmo()
 
-                        msg = "Accepted a connection from %s: arrays= %s" % (
-                            str(from_addr),
-                            str(arrays),
-                        )
+                        msg = f"Accepted a connection from {from_addr}: arrays= {arrays}"
 
-                        client_id = NodeManager._client_id(from_addr[0], arrays)
+                        client_id = NodeManager._client_id(
+                            from_addr[0], arrays)
 
                         # If we already had this client, close previous and
                         # update with new.  We are expecting only one
@@ -723,34 +828,40 @@ class NodeManager(object):
                         # and the network goes down/up etc.
                         with node_mgr.lock:
                             if client_id in node_mgr.known_clients:
-                                p("%s: previously known %s" % (msg, client_id))
+                                p(f"{msg}: previously known {client_id}")
                                 node_mgr.known_clients[client_id].replace(nc)
                             else:
-                                p(
-                                    "%s: new client connection %s"
-                                    % (msg, client_id)
-                                )
+                                p(f"{msg}: new client connection {client_id}")
                                 node_mgr.known_clients[client_id] = nc
 
                         NodeManager.check_for_updates(nc)
 
                     # If all the nodes are doing nothing, lets ping them to
                     # ensure they still are present and responding
+                    # Get snapshot of nodes without holding lock during verify
+                    nodes_to_ping = []
                     with node_mgr.lock:
-                        for i in node_mgr.known_clients.values():
-                            i.verify()
+                        nodes_to_ping = list(node_mgr.known_clients.values())
+
+                    # Ping nodes without holding NodeManager lock
+                    for node in nodes_to_ping:
+                        node.verify()
 
             except KeyboardInterrupt:
                 _try_close(bindsocket)
+                _try_close(connection)
+                _try_close(new_socket)
                 sys.exit(1)
+            except BrokenPipeError as e:
+                _try_close(connection)
+                _try_close(new_socket)
+                p(f"{e} - {from_addr}")
             except ssl.SSLError as ssle:
                 # We get these errors when someone port scan and tries to
                 # connect
+                _try_close(connection)
                 _try_close(new_socket)
-                p(
-                    "SSL error: Rejecting %s for %s"
-                    % (str(from_addr), str(ssle))
-                )
+                p(f"SSL error: Rejecting {from_addr} for {ssle}")
             except:
                 p(str(traceback.format_exc()))
                 _try_close(connection)
@@ -761,39 +872,40 @@ class NodeManager(object):
     @staticmethod
     def check_for_updates(node):
         """
-        Get the current signatures of the files we have and compare it to
-        the ones on the node, if they don't match push them down and restart
-        the client
+        Get the current SHA-256 hashes of the files we have and compare them to
+        the ones on the node. If they don't match, push them down and restart
+        the client.
         :param node: Client node of interest
         :return: None.
         """
+        # Skip client updates in development mode
+        if DEV_MODE:
+            p("⚠ DEV MODE: Skipping client update check")
+            return
+
         p("Checking for updates")
-        local_signatures = []
+        local_hashes = []
 
         files = ["node.py", "testlib.py", "ci_unit_test.sh"]
 
         for f in files:
-            local_signatures.append(file_md5(f))
+            local_hashes.append(file_sha256(f))
 
-        remote_signatures = node.get_file_md5(files)
-        if remote_signatures:
-            if local_signatures != remote_signatures:
+        remote_hashes = node.get_file_sha256(files)
+        if remote_hashes:
+            if local_hashes != remote_hashes:
                 p("Updating client!")
                 for i, fn in enumerate(files):
-                    if local_signatures[i] != remote_signatures[i]:
-                        p(
-                            "File %s local= %s remote= %s"
-                            % (fn, local_signatures[i], remote_signatures[i])
-                        )
+                    if local_hashes[i] != remote_hashes[i]:
+                        p(f"File {fn} local= {local_hashes[i]} remote= {remote_hashes[i]}"
+                          )
 
                 if node.update_files(files):
-                    remote_signatures = node.get_file_md5(files)
-                    if local_signatures == remote_signatures:
+                    remote_hashes = node.get_file_sha256(files)
+                    if local_hashes == remote_hashes:
                         node.restart()
                     else:
-                        p(
-                            "After updating files we have a md5 miss-match,"
-                            " not restarting client!"
-                        )
+                        p("After updating files we have a hash mismatch,"
+                          " not restarting client!")
             else:
                 p("Client is current!")
