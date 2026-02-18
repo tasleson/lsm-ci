@@ -27,19 +27,16 @@ def _create_status(repo, sha1, state, desc, context, log_url=None):
         print("Unexpected error on setting status %d" % r.status_code)
 
 ```
-**Verifying a sha1 payload signature**
+
+## For more see the [official documentation](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
+
+**Verifying a sha256 payload signature**
 ```python
 def _verify_signature(payload_body, header_signature):
-    """
-    Verify the payload using our shared secret with github
-    """
-    h = hmac.new(GIT_SECRET, payload_body, hashlib.sha1)
-    signature = 'sha1=' + h.hexdigest()
-    try:
-        # Python 2.7 and later have this which is suggested
-        return hmac.compare_digest(signature, header_signature)
-    except AttributeError:
-        return _tscmp(signature, header_signature)
+    # Verify the payload using our shared secret with github
+    h = hmac.new(GIT_SECRET.encode("utf-8"), payload_body, hashlib.sha256)
+    signature = "sha256=" + h.hexdigest()
+    return hmac.compare_digest(signature, header_signature)
 ```
 
 **Handling the event from github (using python bottle)**
@@ -51,15 +48,15 @@ def e_handler():
     """
     # Check secret before we do anything
     if not _verify_signature(request.body.read(),
-                             request.headers['X-Hub-Signature']):
-        response.status = 500
+                             request.headers['X-Hub-Signature-256']):
+        response.status = 403
         return
 
     if request.headers['X-Github-Event'] == 'pull_request':
         repo = request.json["pull_request"]["base"]["repo"]["full_name"]
         sha = request.json["pull_request"]['head']['sha']
         branch = request.json["pull_request"]['head']['ref']
-        
+
         # Set statuses etc. and run tests
 
     else:
