@@ -27,6 +27,18 @@ def gen_signature(data):
     return s.encode("utf-8")
 
 
+def gen_signature_256(data):
+    """
+    Generate the signature for the data.
+    :param data: Data to generate signature for
+    :return: "sha256=<hexdigest>"
+    """
+    h = hmac.new(GIT_SECRET.encode("utf-8"), data.encode("utf-8"),
+                 hashlib.sha256)
+    s = "sha256=" + h.hexdigest()
+    return s.encode("utf-8")
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="github event creation")
@@ -50,6 +62,7 @@ if __name__ == "__main__":
     head = {
         "Content-type": "application/json",
         "X-Hub-Signature": "",
+        "X-Hub-Signature-256": "",
         "X-Github-Event": "pull_request",
     }
 
@@ -71,6 +84,7 @@ if __name__ == "__main__":
     body_json = json.dumps(body)
 
     head["X-Hub-Signature"] = gen_signature(body_json)
+    head["X-Hub-Signature-256"] = gen_signature_256(body_json)
 
     response = requests.post(url=url,
                              headers=head,
