@@ -384,9 +384,8 @@ def run_tests(info):
 
 # Verify the payload using our shared secret with github
 def _verify_signature(payload_body, header_signature):
-    # noinspection PyUnresolvedReferences
-    h = hmac.new(GIT_SECRET.encode("utf-8"), payload_body, hashlib.sha1)
-    signature = "sha1=" + h.hexdigest()
+    h = hmac.new(GIT_SECRET.encode("utf-8"), payload_body, hashlib.sha256)
+    signature = "sha256=" + h.hexdigest()
     return hmac.compare_digest(signature, header_signature)
 
 
@@ -585,16 +584,25 @@ def fetch(log_file):
     return
 
 
+def _log_suspicious_client(request, body):
+    headers_str = "\n".join(f"{k}: {v}" for k, v in request.headers.items())
+
+    _p(f"WARNING: Invalid payload sha256 from: {request.remote_addr} \
+        \nheader\n{headers_str}\nbody\n{body}")
+
+
 @route("/event_handler", method="POST")
 def e_handler():
     """
     Github calls this when we get a pull request
-    :return: Http status code, 500 on error, else 200.
+    :return: Http status code, 403 on error, else 200.
     """
     # Check secret before we do *anything*
-    if not _verify_signature(request.body.read(),
-                             request.headers["X-Hub-Signature"]):
-        response.status = 500
+    body = request.body.read()
+
+    if not _verify_signature(body, request.headers["X-Hub-Signature-256"]):
+        _log_suspicious_client(request, body)
+        response.status = 403
         return
 
     if request.headers["X-Github-Event"] == "pull_request":
